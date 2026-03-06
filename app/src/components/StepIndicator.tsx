@@ -2,7 +2,7 @@ type StepIndicatorProps = {
   currentStep: number;
 };
 
-const steps = ["Registro", "Funcionários", "Materiais", "Serviços", "Fotos"];
+const steps = ["Registro", "Funcionários", "NF's", "Serviços", "Fotos"];
 
 export default function StepIndicator({
   currentStep,
