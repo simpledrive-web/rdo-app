@@ -2,6 +2,8 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "../supabase/client";
 
+const appUrl = import.meta.env.VITE_APP_URL;
+
 export default function Register() {
   const navigate = useNavigate();
 
@@ -19,10 +21,15 @@ export default function Register() {
     setSuccessMessage("");
     setLoading(true);
 
+    const redirectTo = appUrl
+      ? `${appUrl}/login`
+      : `${window.location.origin}/login`;
+
     const { error } = await supabase.auth.signUp({
       email: email.trim(),
       password,
       options: {
+        emailRedirectTo: redirectTo,
         data: {
           first_name: firstName.trim(),
           last_name: lastName.trim(),
@@ -38,11 +45,13 @@ export default function Register() {
     }
 
     setLoading(false);
-    setSuccessMessage("Conta criada com sucesso. Agora você já pode entrar.");
+    setSuccessMessage(
+      "Conta criada com sucesso. Verifique seu e-mail para confirmar a conta."
+    );
 
     setTimeout(() => {
       navigate("/login");
-    }, 1400);
+    }, 1800);
   }
 
   return (

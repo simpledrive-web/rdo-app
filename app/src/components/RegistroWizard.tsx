@@ -8,10 +8,10 @@ type Funcionario = {
   horas: string;
 };
 
-type Material = {
-  nome: string;
-  quantidade: string;
-  unidade: string;
+type NotaFiscal = {
+  numero: string;
+  descricao: string;
+  arquivo: File | null;
 };
 
 type Servico = {
@@ -31,6 +31,11 @@ type RegistroWizardProps = {
   onSaved?: () => Promise<void> | void;
 };
 
+const NF_BUCKET = "nota-fiscais";
+const NF_TABLE = "invoice_files";
+const NF_ACCEPT =
+  ".jpg,.jpeg,.png,.pdf,.txt,.doc,.doc,.docx,application/pdf,image/jpeg,image/png,text/plain,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+
 export default function RegistroWizard({
   project,
   onSaved,
@@ -47,8 +52,8 @@ export default function RegistroWizard({
     { nome: "", funcao: "", horas: "" },
   ]);
 
-  const [materiais, setMateriais] = useState<Material[]>([
-    { nome: "", quantidade: "", unidade: "" },
+  const [notasFiscais, setNotasFiscais] = useState<NotaFiscal[]>([
+    { numero: "", descricao: "", arquivo: null },
   ]);
 
   const [servicos, setServicos] = useState<Servico[]>([
@@ -83,22 +88,39 @@ export default function RegistroWizard({
     setFuncionarios((prev) => prev.filter((_, i) => i !== index));
   }
 
-  function updateMaterial(
+  function updateNotaFiscal(
     index: number,
-    field: keyof Material,
+    field: keyof Omit<NotaFiscal, "arquivo">,
     value: string
   ) {
-    const updated = [...materiais];
+    const updated = [...notasFiscais];
     updated[index][field] = value;
-    setMateriais(updated);
+    setNotasFiscais(updated);
   }
 
-  function addMaterial() {
-    setMateriais((prev) => [...prev, { nome: "", quantidade: "", unidade: "" }]);
+  function updateNotaFiscalArquivo(index: number, file: File | null) {
+    const updated = [...notasFiscais];
+    updated[index].arquivo = file;
+    setNotasFiscais(updated);
   }
 
-  function removeMaterial(index: number) {
-    setMateriais((prev) => prev.filter((_, i) => i !== index));
+  function addNotaFiscal() {
+    setNotasFiscais((prev) => [
+      ...prev,
+      { numero: "", descricao: "", arquivo: null },
+    ]);
+  }
+
+  function removeNotaFiscal(index: number) {
+    setNotasFiscais((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  function handleNotaFiscalFileChange(
+    index: number,
+    event: ChangeEvent<HTMLInputElement>
+  ) {
+    const file = event.target.files?.[0] ?? null;
+    updateNotaFiscalArquivo(index, file);
   }
 
   function updateServico(
@@ -141,7 +163,7 @@ export default function RegistroWizard({
     setResumo("");
     setOcorrencias("");
     setFuncionarios([{ nome: "", funcao: "", horas: "" }]);
-    setMateriais([{ nome: "", quantidade: "", unidade: "" }]);
+    setNotasFiscais([{ numero: "", descricao: "", arquivo: null }]);
     setServicos([{ descricao: "", status: "" }]);
     setFotos([]);
   }
@@ -197,23 +219,6 @@ export default function RegistroWizard({
       }
     }
 
-    const materialPayload = materiais
-      .filter((item) => item.nome.trim())
-      .map((item) => ({
-        daily_log_id: dailyLogId,
-        material: item.nome.trim(),
-        quantity: item.quantidade.trim() ? Number(item.quantidade) : null,
-        unit: item.unidade.trim() || null,
-        notes: null,
-      }));
-
-    if (materialPayload.length > 0) {
-      const { error } = await supabase.from("materials_used").insert(materialPayload);
-      if (error) {
-        throw new Error(`Erro ao salvar materiais: ${error.message}`);
-      }
-    }
-
     const serviceSummary = servicos
       .filter((item) => item.descricao.trim())
       .map((item) => {
@@ -233,6 +238,54 @@ export default function RegistroWizard({
 
       if (error) {
         throw new Error(`Erro ao salvar serviços: ${error.message}`);
+      }
+    }
+
+    const notasValidas = notasFiscais.filter(
+      (item) =>
+        item.numero.trim() || item.descricao.trim() || item.arquivo !== null
+    );
+
+    for (const nf of notasValidas) {
+      if (!nf.arquivo) {
+        throw new Error(
+          `Selecione o arquivo da NF "${nf.numero || nf.descricao || "sem identificação"}".`
+        );
+      }
+
+      const ext = nf.arquivo.name.split(".").pop()?.toLowerCase() || "file";
+      const safeNumber = (nf.numero || "sem-numero")
+        .trim()
+        .replace(/[^\w\-]+/g, "_");
+      const fileName = `${project.id}/${dailyLogId}/${Date.now()}-${Math.random()
+        .toString(36)
+        .slice(2)}-${safeNumber}.${ext}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from(NF_BUCKET)
+        .upload(fileName, nf.arquivo, {
+          cacheControl: "3600",
+          upsert: false,
+        });
+
+      if (uploadError) {
+        throw new Error(`Erro no upload da NF: ${uploadError.message}`);
+      }
+
+      const { error: nfInsertError } = await supabase.from(NF_TABLE).insert({
+        project_id: project.id,
+        daily_log_id: dailyLogId,
+        invoice_number: nf.numero.trim() || null,
+        description: nf.descricao.trim() || null,
+        original_file_name: nf.arquivo.name,
+        storage_path: fileName,
+        mime_type: nf.arquivo.type || null,
+        file_size: nf.arquivo.size,
+        uploaded_by: authData.user.id,
+      });
+
+      if (nfInsertError) {
+        throw new Error(`Erro ao salvar nota fiscal: ${nfInsertError.message}`);
       }
     }
 
@@ -277,12 +330,19 @@ export default function RegistroWizard({
       )
       .join("");
 
-    const materiaisHtml = materiais
-      .filter((m) => m.nome.trim())
-      .map(
-        (m) =>
-          `<li><strong>${m.nome}</strong> - ${m.quantidade || "-"} ${m.unidade || ""}</li>`
-      )
+    const notasFiscaisHtml = notasFiscais
+      .filter((nf) => nf.numero.trim() || nf.descricao.trim() || nf.arquivo)
+      .map((nf) => {
+        const partes = [
+          nf.numero.trim() ? `<strong>Nº:</strong> ${nf.numero.trim()}` : "",
+          nf.descricao.trim()
+            ? `<strong>Descrição:</strong> ${nf.descricao.trim()}`
+            : "",
+          nf.arquivo ? `<strong>Arquivo:</strong> ${nf.arquivo.name}` : "",
+        ].filter(Boolean);
+
+        return `<li>${partes.join(" | ")}</li>`;
+      })
       .join("");
 
     const servicosHtml = servicos
@@ -353,8 +413,8 @@ export default function RegistroWizard({
           </div>
 
           <div class="box">
-            <h3>Materiais</h3>
-            <ul>${materiaisHtml || "<li>Nenhum</li>"}</ul>
+            <h3>NF's</h3>
+            <ul>${notasFiscaisHtml || "<li>Nenhuma</li>"}</ul>
           </div>
 
           <div class="box">
@@ -532,48 +592,58 @@ export default function RegistroWizard({
             <button
               type="button"
               className="rdo-btn rdo-btn-secondary"
-              onClick={addMaterial}
+              onClick={addNotaFiscal}
             >
-              + Adicionar material
+              + Adicionar NF
             </button>
           </div>
 
           <div className="rdo-repeat-list">
-            {materiais.map((material, index) => (
+            {notasFiscais.map((nf, index) => (
               <div className="rdo-repeat-item" key={index}>
-                <div className="rdo-repeat-fields-3">
-                  <div className="rdo-field">
-                    <label className="rdo-label">Material</label>
-                    <input
-                      className="rdo-input"
-                      value={material.nome}
-                      onChange={(e) =>
-                        updateMaterial(index, "nome", e.target.value)
-                      }
-                    />
+                <div className="rdo-form-grid">
+                  <div className="rdo-repeat-fields-2">
+                    <div className="rdo-field">
+                      <label className="rdo-label">Número da NF</label>
+                      <input
+                        className="rdo-input"
+                        value={nf.numero}
+                        onChange={(e) =>
+                          updateNotaFiscal(index, "numero", e.target.value)
+                        }
+                      />
+                    </div>
+
+                    <div className="rdo-field">
+                      <label className="rdo-label">Descrição</label>
+                      <input
+                        className="rdo-input"
+                        placeholder="Ex: Compra de cimento, areia, ferragem..."
+                        value={nf.descricao}
+                        onChange={(e) =>
+                          updateNotaFiscal(index, "descricao", e.target.value)
+                        }
+                      />
+                    </div>
                   </div>
 
                   <div className="rdo-field">
-                    <label className="rdo-label">Quantidade</label>
+                    <label className="rdo-label">Arquivo da NF</label>
                     <input
                       className="rdo-input"
-                      value={material.quantidade}
-                      onChange={(e) =>
-                        updateMaterial(index, "quantidade", e.target.value)
-                      }
+                      type="file"
+                      accept={NF_ACCEPT}
+                      onChange={(e) => handleNotaFiscalFileChange(index, e)}
                     />
-                  </div>
+                    <p className="rdo-form-subtitle" style={{ marginTop: 8 }}>
+                      Formatos aceitos: JPG, JPEG, PNG, PDF, TXT, DOC e DOCX.
+                    </p>
 
-                  <div className="rdo-field">
-                    <label className="rdo-label">Unidade</label>
-                    <input
-                      className="rdo-input"
-                      placeholder="Ex: saco, m², m³, un"
-                      value={material.unidade}
-                      onChange={(e) =>
-                        updateMaterial(index, "unidade", e.target.value)
-                      }
-                    />
+                    {nf.arquivo && (
+                      <p className="rdo-form-subtitle" style={{ marginTop: 8 }}>
+                        Arquivo selecionado: <strong>{nf.arquivo.name}</strong>
+                      </p>
+                    )}
                   </div>
                 </div>
 
@@ -581,8 +651,8 @@ export default function RegistroWizard({
                   <button
                     type="button"
                     className="rdo-btn rdo-btn-danger rdo-remove-btn"
-                    onClick={() => removeMaterial(index)}
-                    disabled={materiais.length === 1}
+                    onClick={() => removeNotaFiscal(index)}
+                    disabled={notasFiscais.length === 1}
                   >
                     Remover
                   </button>
