@@ -2,12 +2,16 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "../supabase/client";
 
+const appUrl = import.meta.env.VITE_APP_URL;
+
 export default function Login() {
   const navigate = useNavigate();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [message, setMessage] = useState("");
 
   async function handleLogin(e: React.FormEvent) {
@@ -30,6 +34,30 @@ export default function Login() {
     navigate("/dashboard");
   }
 
+  async function handleGoogleLogin() {
+    try {
+      setMessage("");
+      setGoogleLoading(true);
+
+      const redirectTo = appUrl
+        ? `${appUrl}/dashboard`
+        : `${window.location.origin}/dashboard`;
+
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo,
+        },
+      });
+
+      if (error) {
+        setMessage(error.message);
+      }
+    } finally {
+      setGoogleLoading(false);
+    }
+  }
+
   return (
     <div className="auth-page">
       <div className="auth-card">
@@ -45,6 +73,31 @@ export default function Login() {
         <p className="auth-subtitle">
           Faça login para acessar suas obras, registros diários e fotos.
         </p>
+
+        <div style={{ marginBottom: 16 }}>
+          <button
+            type="button"
+            className="rdo-btn rdo-btn-secondary"
+            onClick={handleGoogleLogin}
+            disabled={googleLoading || loading}
+            style={{ width: "100%" }}
+          >
+            {googleLoading ? "Redirecionando..." : "Entrar com Google"}
+          </button>
+        </div>
+
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            marginBottom: 16,
+          }}
+        >
+          <div style={{ flex: 1, height: 1, background: "#e5e7eb" }} />
+          <span style={{ fontSize: 14, color: "#6b7280" }}>ou</span>
+          <div style={{ flex: 1, height: 1, background: "#e5e7eb" }} />
+        </div>
 
         <form className="auth-form" onSubmit={handleLogin}>
           <div className="rdo-field">
@@ -62,17 +115,36 @@ export default function Login() {
             <label className="rdo-label">Senha</label>
             <input
               className="rdo-input"
-              type="password"
+              type={showPassword ? "text" : "password"}
               placeholder="Digite sua senha"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
             />
           </div>
 
+          <label
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              marginBottom: 16,
+              cursor: "pointer",
+              fontSize: 14,
+              color: "#374151",
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={showPassword}
+              onChange={() => setShowPassword((prev) => !prev)}
+            />
+            Mostrar senha
+          </label>
+
           <button
             type="submit"
             className="rdo-btn rdo-btn-primary"
-            disabled={loading}
+            disabled={loading || googleLoading}
           >
             {loading ? "Entrando..." : "Entrar"}
           </button>

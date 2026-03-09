@@ -11,7 +11,11 @@ export default function Register() {
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
 
@@ -19,6 +23,17 @@ export default function Register() {
     e.preventDefault();
     setErrorMessage("");
     setSuccessMessage("");
+
+    if (password !== confirmPassword) {
+      setErrorMessage("As senhas não coincidem.");
+      return;
+    }
+
+    if (password.length < 6) {
+      setErrorMessage("A senha deve ter pelo menos 6 caracteres.");
+      return;
+    }
+
     setLoading(true);
 
     const redirectTo = appUrl
@@ -54,6 +69,31 @@ export default function Register() {
     }, 1800);
   }
 
+  async function handleGoogleRegister() {
+    try {
+      setErrorMessage("");
+      setSuccessMessage("");
+      setGoogleLoading(true);
+
+      const redirectTo = appUrl
+        ? `${appUrl}/dashboard`
+        : `${window.location.origin}/dashboard`;
+
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo,
+        },
+      });
+
+      if (error) {
+        setErrorMessage(error.message);
+      }
+    } finally {
+      setGoogleLoading(false);
+    }
+  }
+
   return (
     <div className="auth-page">
       <div className="auth-card">
@@ -69,6 +109,31 @@ export default function Register() {
         <p className="auth-subtitle">
           Cadastre-se para começar a gerenciar suas obras com mais organização.
         </p>
+
+        <div style={{ marginBottom: 16 }}>
+          <button
+            type="button"
+            className="rdo-btn rdo-btn-secondary"
+            onClick={handleGoogleRegister}
+            disabled={googleLoading || loading}
+            style={{ width: "100%" }}
+          >
+            {googleLoading ? "Redirecionando..." : "Continuar com Google"}
+          </button>
+        </div>
+
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            marginBottom: 16,
+          }}
+        >
+          <div style={{ flex: 1, height: 1, background: "#e5e7eb" }} />
+          <span style={{ fontSize: 14, color: "#6b7280" }}>ou</span>
+          <div style={{ flex: 1, height: 1, background: "#e5e7eb" }} />
+        </div>
 
         <form className="auth-form" onSubmit={handleRegister}>
           <div className="auth-grid-2">
@@ -110,17 +175,66 @@ export default function Register() {
             <label className="rdo-label">Senha</label>
             <input
               className="rdo-input"
-              type="password"
+              type={showPassword ? "text" : "password"}
               placeholder="Crie uma senha"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
             />
           </div>
 
+          <label
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              marginBottom: 12,
+              cursor: "pointer",
+              fontSize: 14,
+              color: "#374151",
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={showPassword}
+              onChange={() => setShowPassword((prev) => !prev)}
+            />
+            Mostrar senha
+          </label>
+
+          <div className="rdo-field">
+            <label className="rdo-label">Confirmar senha</label>
+            <input
+              className="rdo-input"
+              type={showConfirmPassword ? "text" : "password"}
+              placeholder="Digite a senha novamente"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+            />
+          </div>
+
+          <label
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              marginBottom: 16,
+              cursor: "pointer",
+              fontSize: 14,
+              color: "#374151",
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={showConfirmPassword}
+              onChange={() => setShowConfirmPassword((prev) => !prev)}
+            />
+            Mostrar confirmação de senha
+          </label>
+
           <button
             type="submit"
             className="rdo-btn rdo-btn-primary"
-            disabled={loading}
+            disabled={loading || googleLoading}
           >
             {loading ? "Criando conta..." : "Criar conta"}
           </button>
