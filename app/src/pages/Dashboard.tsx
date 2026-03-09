@@ -69,7 +69,7 @@ export default function Dashboard() {
 
               <p className="dashboard-subtitle">
                 Organize registros diários, acompanhe o andamento das obras,
-                adicione funcionários, materiais, serviços e fotos em um só
+                adicione funcionários, notas fiscais, serviços e fotos em um só
                 lugar.
               </p>
             </div>
@@ -81,6 +81,14 @@ export default function Dashboard() {
                 onClick={() => navigate("/obras")}
               >
                 Ir para Obras
+              </button>
+
+              <button
+                type="button"
+                className="rdo-btn rdo-btn-secondary"
+                onClick={() => navigate("/usuarios")}
+              >
+                Ver Usuários
               </button>
 
               <button

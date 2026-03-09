@@ -1,6 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import ObraCard from "../components/ObraCard";
 import { supabase } from "../supabase/client";
 
 type ProjectRow = {
@@ -9,10 +8,13 @@ type ProjectRow = {
   client_name: string | null;
   address: string | null;
   user_id: string | null;
+  created_at?: string | null;
 };
 
-type DailyLogCountRow = {
+type DailyLogRow = {
+  id: string;
   project_id: string;
+  log_date: string;
 };
 
 type Obra = {
@@ -21,6 +23,7 @@ type Obra = {
   cliente: string;
   endereco: string;
   registros: number;
+  ultimaDataRegistro: string | null;
 };
 
 export default function ObrasPage() {
@@ -34,6 +37,7 @@ export default function ObrasPage() {
   const [nome, setNome] = useState("");
   const [cliente, setCliente] = useState("");
   const [endereco, setEndereco] = useState("");
+  const [busca, setBusca] = useState("");
 
   async function loadObras() {
     setLoading(true);
@@ -50,7 +54,7 @@ export default function ObrasPage() {
 
     const { data: projectsData, error: projectsError } = await supabase
       .from("projects")
-      .select("id, name, client_name, address, user_id")
+      .select("id, name, client_name, address, user_id, created_at")
       .eq("user_id", user.id)
       .order("created_at", { ascending: false });
 
@@ -62,23 +66,30 @@ export default function ObrasPage() {
 
     const projects = (projectsData ?? []) as ProjectRow[];
     const projectIds = projects.map((item) => item.id);
-    const logsByProject = new Map<string, number>();
+
+    const registrosPorProjeto = new Map<string, number>();
+    const ultimaDataPorProjeto = new Map<string, string>();
 
     if (projectIds.length > 0) {
       const { data: logsData, error: logsError } = await supabase
         .from("daily_logs")
-        .select("project_id")
-        .in("project_id", projectIds);
+        .select("id, project_id, log_date")
+        .in("project_id", projectIds)
+        .order("log_date", { ascending: false });
 
       if (logsError) {
-        alert(`Erro ao carregar contagem de registros: ${logsError.message}`);
+        alert(`Erro ao carregar registros: ${logsError.message}`);
         setLoading(false);
         return;
       }
 
-      (logsData as DailyLogCountRow[] | null)?.forEach((log) => {
-        const current = logsByProject.get(log.project_id) ?? 0;
-        logsByProject.set(log.project_id, current + 1);
+      (logsData as DailyLogRow[] | null)?.forEach((log) => {
+        const atual = registrosPorProjeto.get(log.project_id) ?? 0;
+        registrosPorProjeto.set(log.project_id, atual + 1);
+
+        if (!ultimaDataPorProjeto.has(log.project_id)) {
+          ultimaDataPorProjeto.set(log.project_id, log.log_date);
+        }
       });
     }
 
@@ -87,7 +98,8 @@ export default function ObrasPage() {
       nome: item.name,
       cliente: item.client_name ?? "",
       endereco: item.address ?? "",
-      registros: logsByProject.get(item.id) ?? 0,
+      registros: registrosPorProjeto.get(item.id) ?? 0,
+      ultimaDataRegistro: ultimaDataPorProjeto.get(item.id) ?? null,
     }));
 
     setObras(mapped);
@@ -97,6 +109,20 @@ export default function ObrasPage() {
   useEffect(() => {
     loadObras();
   }, []);
+
+  const obrasFiltradas = useMemo(() => {
+    const termo = busca.trim().toLowerCase();
+
+    if (!termo) return obras;
+
+    return obras.filter((obra) => {
+      return (
+        obra.nome.toLowerCase().includes(termo) ||
+        obra.cliente.toLowerCase().includes(termo) ||
+        obra.endereco.toLowerCase().includes(termo)
+      );
+    });
+  }, [obras, busca]);
 
   function handleOpen(id: string) {
     navigate(`/obra/${id}`);
@@ -209,11 +235,22 @@ export default function ObrasPage() {
           <div>
             <h1 className="rdo-title">Obras</h1>
             <p className="rdo-subtitle">
-              Gerencie suas obras e acesse os registros diários.
+              Gerencie suas obras e acompanhe os registros diários finalizados.
             </p>
           </div>
 
-          <div className="rdo-header-actions">
+          <div
+            className="rdo-header-actions"
+            style={{ display: "flex", gap: 12, flexWrap: "wrap" }}
+          >
+            <button
+              type="button"
+              className="rdo-btn rdo-btn-secondary"
+              onClick={() => navigate("/dashboard")}
+            >
+              Dashboard
+            </button>
+
             <button
               type="button"
               className="rdo-btn rdo-btn-primary"
@@ -229,6 +266,19 @@ export default function ObrasPage() {
             >
               Sair
             </button>
+          </div>
+        </div>
+
+        <div className="rdo-card rdo-section rdo-top-gap">
+          <div className="rdo-field">
+            <label className="rdo-label">Buscar obra</label>
+            <input
+              className="rdo-input"
+              type="text"
+              placeholder="Digite nome da obra, cliente ou endereço"
+              value={busca}
+              onChange={(e) => setBusca(e.target.value)}
+            />
           </div>
         </div>
 
@@ -318,15 +368,117 @@ export default function ObrasPage() {
           </div>
         )}
 
+        {!loading && obras.length > 0 && obrasFiltradas.length === 0 && (
+          <div className="rdo-card rdo-section rdo-top-gap">
+            <p className="rdo-empty-state">
+              Nenhuma obra encontrada para essa busca.
+            </p>
+          </div>
+        )}
+
         {!loading &&
-          obras.map((obra) => (
-            <ObraCard
+          obrasFiltradas.map((obra) => (
+            <div
               key={obra.id}
-              obra={obra}
-              onOpen={handleOpen}
-              onEdit={handleEdit}
-              onDelete={handleDelete}
-            />
+              className="rdo-card rdo-section rdo-top-gap"
+              style={{ padding: 20 }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  gap: 16,
+                  flexWrap: "wrap",
+                  alignItems: "flex-start",
+                }}
+              >
+                <div style={{ flex: 1, minWidth: 260 }}>
+                  <h2 style={{ margin: 0, fontSize: 22 }}>{obra.nome}</h2>
+
+                  <div style={{ marginTop: 10, color: "#4b5563", lineHeight: 1.6 }}>
+                    <div>
+                      <strong>Cliente:</strong> {obra.cliente || "-"}
+                    </div>
+                    <div>
+                      <strong>Endereço:</strong> {obra.endereco || "-"}
+                    </div>
+                  </div>
+
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: 10,
+                      flexWrap: "wrap",
+                      marginTop: 14,
+                    }}
+                  >
+                    <span
+                      style={{
+                        border: "1px solid #dbeafe",
+                        background: "#eff6ff",
+                        color: "#1d4ed8",
+                        borderRadius: 999,
+                        padding: "7px 12px",
+                        fontSize: 13,
+                        fontWeight: 600,
+                      }}
+                    >
+                      {obra.registros} registro(s)
+                    </span>
+
+                    <span
+                      style={{
+                        border: "1px solid #e5e7eb",
+                        background: "#f9fafb",
+                        color: "#374151",
+                        borderRadius: 999,
+                        padding: "7px 12px",
+                        fontSize: 13,
+                        fontWeight: 600,
+                      }}
+                    >
+                      Último registro:{" "}
+                      {obra.ultimaDataRegistro
+                        ? new Date(obra.ultimaDataRegistro).toLocaleDateString("pt-BR")
+                        : "Nenhum"}
+                    </span>
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    display: "flex",
+                    gap: 10,
+                    flexWrap: "wrap",
+                    justifyContent: "flex-end",
+                  }}
+                >
+                  <button
+                    type="button"
+                    className="rdo-btn rdo-btn-primary"
+                    onClick={() => handleOpen(obra.id)}
+                  >
+                    Abrir obra
+                  </button>
+
+                  <button
+                    type="button"
+                    className="rdo-btn rdo-btn-secondary"
+                    onClick={() => handleEdit(obra.id)}
+                  >
+                    Editar
+                  </button>
+
+                  <button
+                    type="button"
+                    className="rdo-btn rdo-btn-danger"
+                    onClick={() => handleDelete(obra.id)}
+                  >
+                    Excluir
+                  </button>
+                </div>
+              </div>
+            </div>
           ))}
       </div>
     </div>
