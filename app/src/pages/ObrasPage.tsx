@@ -62,6 +62,8 @@ export default function ObrasPage() {
   const [sharedMembers, setSharedMembers] = useState<SharedMember[]>([]);
   const [membersLoading, setMembersLoading] = useState(false);
 
+  const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
+
   async function loadObras() {
     setLoading(true);
 
@@ -179,6 +181,48 @@ export default function ObrasPage() {
     });
   }, [obras, busca]);
 
+  async function handleCreateObra(e: React.FormEvent) {
+    e.preventDefault();
+
+    if (!nome.trim()) {
+      alert("Informe o nome da obra.");
+      return;
+    }
+
+    setSaving(true);
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      alert("Usuário não autenticado.");
+      setSaving(false);
+      return;
+    }
+
+    const { error } = await supabase.from("projects").insert({
+      name: nome.trim(),
+      client_name: cliente.trim() || null,
+      address: endereco.trim() || null,
+      user_id: user.id,
+    });
+
+    if (error) {
+      alert(`Erro ao criar obra: ${error.message}`);
+      setSaving(false);
+      return;
+    }
+
+    setNome("");
+    setCliente("");
+    setEndereco("");
+    setShowCreateForm(false);
+    setSaving(false);
+
+    await loadObras();
+  }
+
   function handleOpen(id: string) {
     navigate(`/obra/${id}`);
   }
@@ -240,48 +284,6 @@ export default function ObrasPage() {
     await loadObras();
   }
 
-  async function handleCreateObra(e: React.FormEvent) {
-    e.preventDefault();
-
-    if (!nome.trim()) {
-      alert("Informe o nome da obra.");
-      return;
-    }
-
-    setSaving(true);
-
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      alert("Usuário não autenticado.");
-      setSaving(false);
-      return;
-    }
-
-    const { error } = await supabase.from("projects").insert({
-      name: nome.trim(),
-      client_name: cliente.trim() || null,
-      address: endereco.trim() || null,
-      user_id: user.id,
-    });
-
-    if (error) {
-      alert(`Erro ao criar obra: ${error.message}`);
-      setSaving(false);
-      return;
-    }
-
-    setNome("");
-    setCliente("");
-    setEndereco("");
-    setShowCreateForm(false);
-    setSaving(false);
-
-    await loadObras();
-  }
-
   async function handleLogout() {
     const confirmLogout = window.confirm("Deseja sair da conta?");
     if (!confirmLogout) return;
@@ -313,10 +315,7 @@ export default function ObrasPage() {
 
     const userIds = (memberships ?? []).map((item) => item.user_id);
 
-    let profilesMap = new Map<
-      string,
-      { email: string; full_name: string }
-    >();
+    let profilesMap = new Map<string, { email: string; full_name: string }>();
 
     if (userIds.length > 0) {
       const { data: profilesData, error: profilesError } = await supabase
@@ -535,6 +534,16 @@ export default function ObrasPage() {
       </span>
     );
   }
+
+  const menuItem: React.CSSProperties = {
+    padding: "10px 14px",
+    background: "none",
+    border: "none",
+    textAlign: "left",
+    cursor: "pointer",
+    fontSize: 14,
+    width: "100%",
+  };
 
   return (
     <div className="rdo-page">
@@ -757,7 +766,9 @@ export default function ObrasPage() {
                     >
                       Último registro:{" "}
                       {obra.ultimaDataRegistro
-                        ? new Date(obra.ultimaDataRegistro).toLocaleDateString("pt-BR")
+                        ? new Date(obra.ultimaDataRegistro).toLocaleDateString(
+                            "pt-BR"
+                          )
                         : "Nenhum"}
                     </span>
                   </div>
@@ -767,8 +778,8 @@ export default function ObrasPage() {
                   style={{
                     display: "flex",
                     gap: 10,
-                    flexWrap: "wrap",
-                    justifyContent: "flex-end",
+                    alignItems: "center",
+                    position: "relative",
                   }}
                 >
                   <button
@@ -779,7 +790,71 @@ export default function ObrasPage() {
                     Abrir obra
                   </button>
 
-                  {(obra.accessRole === "owner" || obra.accessRole === "editor") && (
+                  {obra.accessRole === "owner" && (
+                    <>
+                      <button
+                        type="button"
+                        className="rdo-btn rdo-btn-secondary"
+                        onClick={() =>
+                          setMenuOpenId(menuOpenId === obra.id ? null : obra.id)
+                        }
+                        style={{ padding: "8px 12px" }}
+                      >
+                        ⋮
+                      </button>
+
+                      {menuOpenId === obra.id && (
+                        <div
+                          style={{
+                            position: "absolute",
+                            top: 45,
+                            right: 0,
+                            background: "#fff",
+                            border: "1px solid #e5e7eb",
+                            borderRadius: 10,
+                            boxShadow: "0 8px 20px rgba(0,0,0,0.08)",
+                            display: "flex",
+                            flexDirection: "column",
+                            minWidth: 170,
+                            zIndex: 20,
+                            overflow: "hidden",
+                          }}
+                        >
+                          <button
+                            onClick={() => {
+                              setMenuOpenId(null);
+                              handleEdit(obra.id);
+                            }}
+                            style={menuItem}
+                          >
+                            Editar
+                          </button>
+
+                          <button
+                            onClick={() => {
+                              setMenuOpenId(null);
+                              openShareModal(obra);
+                            }}
+                            style={menuItem}
+                          >
+                            Compartilhar
+                          </button>
+
+                          <button
+                            onClick={() => {
+                              setMenuOpenId(null);
+                              handleDelete(obra.id);
+                            }}
+                            style={{ ...menuItem, color: "#dc2626" }}
+                          >
+                            Excluir
+                          </button>
+                        </div>
+                      )}
+                    </>
+                  )}
+
+                  {obra.accessRole === "editor" && (
                     <button
                       type="button"
                       className="rdo-btn rdo-btn-secondary"
@@ -787,26 +862,6 @@ export default function ObrasPage() {
                     >
                       Editar
                     </button>
-                  )}
-
-                  {obra.accessRole === "owner" && (
-                    <>
-                      <button
-                        type="button"
-                        className="rdo-btn rdo-btn-secondary"
-                        onClick={() => openShareModal(obra)}
-                      >
-                        Compartilhar
-                      </button>
-
-                      <button
-                        type="button"
-                        className="rdo-btn rdo-btn-danger"
-                        onClick={() => handleDelete(obra.id)}
-                      >
-                        Excluir
-                      </button>
-                    </>
                   )}
                 </div>
               </div>
