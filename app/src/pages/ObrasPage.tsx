@@ -32,6 +32,14 @@ type Obra = {
   accessRole: "owner" | "viewer" | "editor" | "admin";
 };
 
+type SharedMember = {
+  id: string;
+  user_id: string;
+  role: "viewer" | "editor" | "admin";
+  email: string;
+  full_name: string;
+};
+
 export default function ObrasPage() {
   const navigate = useNavigate();
 
@@ -50,6 +58,9 @@ export default function ObrasPage() {
   const [shareRole, setShareRole] = useState<"viewer" | "editor">("viewer");
   const [shareLoading, setShareLoading] = useState(false);
   const [shareMessage, setShareMessage] = useState("");
+
+  const [sharedMembers, setSharedMembers] = useState<SharedMember[]>([]);
+  const [membersLoading, setMembersLoading] = useState(false);
 
   async function loadObras() {
     setLoading(true);
@@ -75,11 +86,11 @@ export default function ObrasPage() {
       return;
     }
 
-    const sharedMembers = (sharedRows ?? []) as SharedProjectMemberRow[];
-    const sharedProjectIds = sharedMembers.map((row) => row.project_id);
+    const sharedMembersRows = (sharedRows ?? []) as SharedProjectMemberRow[];
+    const sharedProjectIds = sharedMembersRows.map((row) => row.project_id);
     const sharedRoleMap = new Map<string, "viewer" | "editor" | "admin">();
 
-    sharedMembers.forEach((row) => {
+    sharedMembersRows.forEach((row) => {
       sharedRoleMap.set(row.project_id, row.role);
     });
 
@@ -285,7 +296,64 @@ export default function ObrasPage() {
     navigate("/login");
   }
 
-  function openShareModal(obra: Obra) {
+  async function loadSharedMembers(projectId: string) {
+    setMembersLoading(true);
+
+    const { data: memberships, error: membersError } = await supabase
+      .from("project_members")
+      .select("id, user_id, role")
+      .eq("project_id", projectId)
+      .order("created_at", { ascending: true });
+
+    if (membersError) {
+      setShareMessage(`Erro ao carregar acessos: ${membersError.message}`);
+      setMembersLoading(false);
+      return;
+    }
+
+    const userIds = (memberships ?? []).map((item) => item.user_id);
+
+    let profilesMap = new Map<
+      string,
+      { email: string; full_name: string }
+    >();
+
+    if (userIds.length > 0) {
+      const { data: profilesData, error: profilesError } = await supabase
+        .from("profiles")
+        .select("id, email, full_name")
+        .in("id", userIds);
+
+      if (profilesError) {
+        setShareMessage(`Erro ao carregar perfis: ${profilesError.message}`);
+        setMembersLoading(false);
+        return;
+      }
+
+      profilesMap = new Map(
+        (profilesData ?? []).map((item) => [
+          item.id,
+          {
+            email: item.email ?? "",
+            full_name: item.full_name ?? "Usuário",
+          },
+        ])
+      );
+    }
+
+    const mapped: SharedMember[] = (memberships ?? []).map((item) => ({
+      id: item.id,
+      user_id: item.user_id,
+      role: item.role,
+      email: profilesMap.get(item.user_id)?.email ?? "",
+      full_name: profilesMap.get(item.user_id)?.full_name ?? "Usuário",
+    }));
+
+    setSharedMembers(mapped);
+    setMembersLoading(false);
+  }
+
+  async function openShareModal(obra: Obra) {
     if (obra.accessRole !== "owner") {
       alert("Somente o dono da obra pode compartilhar.");
       return;
@@ -295,6 +363,8 @@ export default function ObrasPage() {
     setShareEmail("");
     setShareRole("viewer");
     setShareMessage("");
+    setSharedMembers([]);
+    await loadSharedMembers(obra.id);
   }
 
   function closeShareModal() {
@@ -302,6 +372,7 @@ export default function ObrasPage() {
     setShareEmail("");
     setShareRole("viewer");
     setShareMessage("");
+    setSharedMembers([]);
   }
 
   async function handleShareProject(e: React.FormEvent) {
@@ -331,7 +402,9 @@ export default function ObrasPage() {
       }
 
       if (!foundUser || foundUser.length === 0) {
-        setShareMessage("Nenhum usuário encontrado com esse e-mail.");
+        setShareMessage(
+          "Nenhum usuário encontrado com esse e-mail. Hoje o compartilhamento funciona apenas para quem já tem cadastro."
+        );
         return;
       }
 
@@ -351,6 +424,7 @@ export default function ObrasPage() {
           project_id: sharingProject.id,
           user_id: targetUser.id,
           role: shareRole,
+          invited_by: user?.id ?? null,
         },
         {
           onConflict: "project_id,user_id",
@@ -363,11 +437,49 @@ export default function ObrasPage() {
       }
 
       setShareMessage("Obra compartilhada com sucesso.");
-      setTimeout(() => {
-        closeShareModal();
-      }, 1200);
+      setShareEmail("");
+      setShareRole("viewer");
+      await loadSharedMembers(sharingProject.id);
     } finally {
       setShareLoading(false);
+    }
+  }
+
+  async function handleUpdateMemberRole(
+    memberId: string,
+    newRole: "viewer" | "editor" | "admin"
+  ) {
+    const { error } = await supabase
+      .from("project_members")
+      .update({ role: newRole })
+      .eq("id", memberId);
+
+    if (error) {
+      alert(`Erro ao atualizar permissão: ${error.message}`);
+      return;
+    }
+
+    if (sharingProject) {
+      await loadSharedMembers(sharingProject.id);
+    }
+  }
+
+  async function handleRemoveMember(memberId: string) {
+    const confirmRemove = window.confirm("Deseja remover esse acesso?");
+    if (!confirmRemove) return;
+
+    const { error } = await supabase
+      .from("project_members")
+      .delete()
+      .eq("id", memberId);
+
+    if (error) {
+      alert(`Erro ao remover acesso: ${error.message}`);
+      return;
+    }
+
+    if (sharingProject) {
+      await loadSharedMembers(sharingProject.id);
     }
   }
 
@@ -720,9 +832,11 @@ export default function ObrasPage() {
             className="rdo-card"
             style={{
               width: "100%",
-              maxWidth: 560,
+              maxWidth: 700,
               padding: 24,
               borderRadius: 20,
+              maxHeight: "90vh",
+              overflowY: "auto",
             }}
             onClick={(e) => e.stopPropagation()}
           >
@@ -809,6 +923,7 @@ export default function ObrasPage() {
                   justifyContent: "flex-end",
                   gap: 12,
                   flexWrap: "wrap",
+                  marginBottom: 24,
                 }}
               >
                 <button
@@ -829,6 +944,85 @@ export default function ObrasPage() {
                 </button>
               </div>
             </form>
+
+            <div
+              style={{
+                borderTop: "1px solid #e5e7eb",
+                paddingTop: 18,
+              }}
+            >
+              <h3 style={{ marginTop: 0 }}>Pessoas com acesso</h3>
+
+              {membersLoading && (
+                <p style={{ color: "#6b7280" }}>Carregando acessos...</p>
+              )}
+
+              {!membersLoading && sharedMembers.length === 0 && (
+                <p style={{ color: "#6b7280" }}>
+                  Nenhum acesso compartilhado ainda.
+                </p>
+              )}
+
+              {!membersLoading &&
+                sharedMembers.map((member) => (
+                  <div
+                    key={member.id}
+                    style={{
+                      border: "1px solid #e5e7eb",
+                      borderRadius: 14,
+                      padding: 14,
+                      marginBottom: 12,
+                      display: "flex",
+                      justifyContent: "space-between",
+                      gap: 12,
+                      flexWrap: "wrap",
+                      alignItems: "center",
+                    }}
+                  >
+                    <div>
+                      <div style={{ fontWeight: 700 }}>
+                        {member.full_name || "Usuário"}
+                      </div>
+                      <div style={{ color: "#6b7280", marginTop: 4 }}>
+                        {member.email || "-"}
+                      </div>
+                    </div>
+
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: 10,
+                        alignItems: "center",
+                        flexWrap: "wrap",
+                      }}
+                    >
+                      <select
+                        className="rdo-select"
+                        value={member.role}
+                        onChange={(e) =>
+                          handleUpdateMemberRole(
+                            member.id,
+                            e.target.value as "viewer" | "editor" | "admin"
+                          )
+                        }
+                        style={{ minWidth: 140 }}
+                      >
+                        <option value="viewer">Visualização</option>
+                        <option value="editor">Editor</option>
+                        <option value="admin">Admin</option>
+                      </select>
+
+                      <button
+                        type="button"
+                        className="rdo-btn rdo-btn-danger"
+                        onClick={() => handleRemoveMember(member.id)}
+                      >
+                        Remover
+                      </button>
+                    </div>
+                  </div>
+                ))}
+            </div>
           </div>
         </div>
       )}
