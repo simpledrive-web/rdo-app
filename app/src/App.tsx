@@ -5,6 +5,7 @@ import Login from "./pages/Login";
 import ObraDetalhePage from "./pages/ObraDetalhePage";
 import ObrasPage from "./pages/ObrasPage";
 import Register from "./pages/Register";
+import ResetPassword from "./pages/ResetPassword";
 import UsersPage from "./pages/UsersPage";
 
 export default function App() {
@@ -15,6 +16,7 @@ export default function App() {
 
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
 
         <Route
           path="/dashboard"

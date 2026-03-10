@@ -12,6 +12,7 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [recoveryLoading, setRecoveryLoading] = useState(false);
   const [message, setMessage] = useState("");
 
   async function handleLogin(e: React.FormEvent) {
@@ -58,6 +59,35 @@ export default function Login() {
     }
   }
 
+  async function handleRecoverAccess() {
+    if (!email.trim()) {
+      setMessage("Digite seu e-mail para recuperar o acesso.");
+      return;
+    }
+
+    try {
+      setMessage("");
+      setRecoveryLoading(true);
+
+      const redirectTo = appUrl
+        ? `${appUrl}/reset-password`
+        : `${window.location.origin}/reset-password`;
+
+      const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+        redirectTo,
+      });
+
+      if (error) {
+        setMessage(error.message);
+        return;
+      }
+
+      setMessage("Enviamos um link de recuperação para o seu e-mail.");
+    } finally {
+      setRecoveryLoading(false);
+    }
+  }
+
   return (
     <div className="auth-page">
       <div className="auth-card">
@@ -79,7 +109,7 @@ export default function Login() {
             type="button"
             className="rdo-btn rdo-btn-secondary"
             onClick={handleGoogleLogin}
-            disabled={googleLoading || loading}
+            disabled={googleLoading || loading || recoveryLoading}
             style={{ width: "100%" }}
           >
             {googleLoading ? "Redirecionando..." : "Entrar com Google"}
@@ -127,7 +157,7 @@ export default function Login() {
               display: "flex",
               alignItems: "center",
               gap: 8,
-              marginBottom: 16,
+              marginBottom: 10,
               cursor: "pointer",
               fontSize: 14,
               color: "#374151",
@@ -141,16 +171,43 @@ export default function Login() {
             Mostrar senha
           </label>
 
+          <div style={{ marginBottom: 16 }}>
+            <button
+              type="button"
+              onClick={handleRecoverAccess}
+              disabled={recoveryLoading || loading || googleLoading}
+              style={{
+                background: "transparent",
+                border: "none",
+                padding: 0,
+                color: "#2563eb",
+                cursor: "pointer",
+                fontSize: 14,
+                fontWeight: 600,
+              }}
+            >
+              {recoveryLoading ? "Enviando..." : "Recuperar acesso"}
+            </button>
+          </div>
+
           <button
             type="submit"
             className="rdo-btn rdo-btn-primary"
-            disabled={loading || googleLoading}
+            disabled={loading || googleLoading || recoveryLoading}
           >
             {loading ? "Entrando..." : "Entrar"}
           </button>
         </form>
 
-        {message && <div className="auth-error">{message}</div>}
+        {message && (
+          <div
+            className={
+              message.includes("Enviamos") ? "auth-success" : "auth-error"
+            }
+          >
+            {message}
+          </div>
+        )}
 
         <p className="auth-footer">
           Não tem conta?{" "}

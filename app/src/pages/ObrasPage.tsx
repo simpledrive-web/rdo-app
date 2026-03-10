@@ -17,6 +17,11 @@ type DailyLogRow = {
   log_date: string;
 };
 
+type SharedProjectMemberRow = {
+  project_id: string;
+  role: "viewer" | "editor" | "admin";
+};
+
 type Obra = {
   id: string;
   nome: string;
@@ -24,6 +29,7 @@ type Obra = {
   endereco: string;
   registros: number;
   ultimaDataRegistro: string | null;
+  accessRole: "owner" | "viewer" | "editor" | "admin";
 };
 
 export default function ObrasPage() {
@@ -39,6 +45,12 @@ export default function ObrasPage() {
   const [endereco, setEndereco] = useState("");
   const [busca, setBusca] = useState("");
 
+  const [sharingProject, setSharingProject] = useState<Obra | null>(null);
+  const [shareEmail, setShareEmail] = useState("");
+  const [shareRole, setShareRole] = useState<"viewer" | "editor">("viewer");
+  const [shareLoading, setShareLoading] = useState(false);
+  const [shareMessage, setShareMessage] = useState("");
+
   async function loadObras() {
     setLoading(true);
 
@@ -52,11 +64,39 @@ export default function ObrasPage() {
       return;
     }
 
-    const { data: projectsData, error: projectsError } = await supabase
+    const { data: sharedRows, error: sharedError } = await supabase
+      .from("project_members")
+      .select("project_id, role")
+      .eq("user_id", user.id);
+
+    if (sharedError) {
+      alert(`Erro ao carregar compartilhamentos: ${sharedError.message}`);
+      setLoading(false);
+      return;
+    }
+
+    const sharedMembers = (sharedRows ?? []) as SharedProjectMemberRow[];
+    const sharedProjectIds = sharedMembers.map((row) => row.project_id);
+    const sharedRoleMap = new Map<string, "viewer" | "editor" | "admin">();
+
+    sharedMembers.forEach((row) => {
+      sharedRoleMap.set(row.project_id, row.role);
+    });
+
+    let projectsQuery = supabase
       .from("projects")
       .select("id, name, client_name, address, user_id, created_at")
-      .or(`user_id.eq.${user.id},id.in.(select project_id from project_members where user_id='${user.id}')`)
       .order("created_at", { ascending: false });
+
+    if (sharedProjectIds.length > 0) {
+      projectsQuery = projectsQuery.or(
+        `user_id.eq.${user.id},id.in.(${sharedProjectIds.join(",")})`
+      );
+    } else {
+      projectsQuery = projectsQuery.eq("user_id", user.id);
+    }
+
+    const { data: projectsData, error: projectsError } = await projectsQuery;
 
     if (projectsError) {
       alert(`Erro ao carregar obras: ${projectsError.message}`);
@@ -100,6 +140,10 @@ export default function ObrasPage() {
       endereco: item.address ?? "",
       registros: registrosPorProjeto.get(item.id) ?? 0,
       ultimaDataRegistro: ultimaDataPorProjeto.get(item.id) ?? null,
+      accessRole:
+        item.user_id === user.id
+          ? "owner"
+          : sharedRoleMap.get(item.id) ?? "viewer",
     }));
 
     setObras(mapped);
@@ -132,6 +176,11 @@ export default function ObrasPage() {
     const obra = obras.find((item) => item.id === id);
     if (!obra) return;
 
+    if (obra.accessRole === "viewer") {
+      alert("Você tem acesso apenas de visualização nesta obra.");
+      return;
+    }
+
     const novoNome = window.prompt("Nome da obra:", obra.nome);
     if (novoNome === null) return;
 
@@ -159,6 +208,14 @@ export default function ObrasPage() {
   }
 
   async function handleDelete(id: string) {
+    const obra = obras.find((item) => item.id === id);
+    if (!obra) return;
+
+    if (obra.accessRole !== "owner") {
+      alert("Somente o dono da obra pode excluir.");
+      return;
+    }
+
     const confirmDelete = window.confirm("Deseja realmente excluir esta obra?");
     if (!confirmDelete) return;
 
@@ -226,6 +283,145 @@ export default function ObrasPage() {
     }
 
     navigate("/login");
+  }
+
+  function openShareModal(obra: Obra) {
+    if (obra.accessRole !== "owner") {
+      alert("Somente o dono da obra pode compartilhar.");
+      return;
+    }
+
+    setSharingProject(obra);
+    setShareEmail("");
+    setShareRole("viewer");
+    setShareMessage("");
+  }
+
+  function closeShareModal() {
+    setSharingProject(null);
+    setShareEmail("");
+    setShareRole("viewer");
+    setShareMessage("");
+  }
+
+  async function handleShareProject(e: React.FormEvent) {
+    e.preventDefault();
+
+    if (!sharingProject) return;
+
+    if (!shareEmail.trim()) {
+      setShareMessage("Digite o e-mail do usuário.");
+      return;
+    }
+
+    try {
+      setShareLoading(true);
+      setShareMessage("");
+
+      const { data: foundUser, error: lookupError } = await supabase.rpc(
+        "lookup_profile_by_email",
+        {
+          target_email: shareEmail.trim(),
+        }
+      );
+
+      if (lookupError) {
+        setShareMessage(`Erro ao buscar usuário: ${lookupError.message}`);
+        return;
+      }
+
+      if (!foundUser || foundUser.length === 0) {
+        setShareMessage("Nenhum usuário encontrado com esse e-mail.");
+        return;
+      }
+
+      const targetUser = foundUser[0];
+
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (user?.id === targetUser.id) {
+        setShareMessage("Você já é o dono desta obra.");
+        return;
+      }
+
+      const { error } = await supabase.from("project_members").upsert(
+        {
+          project_id: sharingProject.id,
+          user_id: targetUser.id,
+          role: shareRole,
+        },
+        {
+          onConflict: "project_id,user_id",
+        }
+      );
+
+      if (error) {
+        setShareMessage(`Erro ao compartilhar: ${error.message}`);
+        return;
+      }
+
+      setShareMessage("Obra compartilhada com sucesso.");
+      setTimeout(() => {
+        closeShareModal();
+      }, 1200);
+    } finally {
+      setShareLoading(false);
+    }
+  }
+
+  function renderAccessBadge(role: Obra["accessRole"]) {
+    const config = {
+      owner: {
+        label: "Dono",
+        style: {
+          border: "1px solid #dbeafe",
+          background: "#eff6ff",
+          color: "#1d4ed8",
+        },
+      },
+      admin: {
+        label: "Admin",
+        style: {
+          border: "1px solid #ede9fe",
+          background: "#f5f3ff",
+          color: "#6d28d9",
+        },
+      },
+      editor: {
+        label: "Editor",
+        style: {
+          border: "1px solid #dcfce7",
+          background: "#f0fdf4",
+          color: "#15803d",
+        },
+      },
+      viewer: {
+        label: "Visualização",
+        style: {
+          border: "1px solid #e5e7eb",
+          background: "#f9fafb",
+          color: "#374151",
+        },
+      },
+    } as const;
+
+    const current = config[role];
+
+    return (
+      <span
+        style={{
+          ...current.style,
+          borderRadius: 999,
+          padding: "7px 12px",
+          fontSize: 13,
+          fontWeight: 600,
+        }}
+      >
+        {current.label}
+      </span>
+    );
   }
 
   return (
@@ -393,7 +589,17 @@ export default function ObrasPage() {
                 }}
               >
                 <div style={{ flex: 1, minWidth: 260 }}>
-                  <h2 style={{ margin: 0, fontSize: 22 }}>{obra.nome}</h2>
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: 10,
+                      flexWrap: "wrap",
+                      alignItems: "center",
+                    }}
+                  >
+                    <h2 style={{ margin: 0, fontSize: 22 }}>{obra.nome}</h2>
+                    {renderAccessBadge(obra.accessRole)}
+                  </div>
 
                   <div style={{ marginTop: 10, color: "#4b5563", lineHeight: 1.6 }}>
                     <div>
@@ -461,26 +667,171 @@ export default function ObrasPage() {
                     Abrir obra
                   </button>
 
-                  <button
-                    type="button"
-                    className="rdo-btn rdo-btn-secondary"
-                    onClick={() => handleEdit(obra.id)}
-                  >
-                    Editar
-                  </button>
+                  {(obra.accessRole === "owner" || obra.accessRole === "editor") && (
+                    <button
+                      type="button"
+                      className="rdo-btn rdo-btn-secondary"
+                      onClick={() => handleEdit(obra.id)}
+                    >
+                      Editar
+                    </button>
+                  )}
 
-                  <button
-                    type="button"
-                    className="rdo-btn rdo-btn-danger"
-                    onClick={() => handleDelete(obra.id)}
-                  >
-                    Excluir
-                  </button>
+                  {obra.accessRole === "owner" && (
+                    <>
+                      <button
+                        type="button"
+                        className="rdo-btn rdo-btn-secondary"
+                        onClick={() => openShareModal(obra)}
+                      >
+                        Compartilhar
+                      </button>
+
+                      <button
+                        type="button"
+                        className="rdo-btn rdo-btn-danger"
+                        onClick={() => handleDelete(obra.id)}
+                      >
+                        Excluir
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
             </div>
           ))}
       </div>
+
+      {sharingProject && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0, 0, 0, 0.45)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 16,
+            zIndex: 999,
+          }}
+          onClick={closeShareModal}
+        >
+          <div
+            className="rdo-card"
+            style={{
+              width: "100%",
+              maxWidth: 560,
+              padding: 24,
+              borderRadius: 20,
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                gap: 12,
+                alignItems: "center",
+                marginBottom: 18,
+              }}
+            >
+              <div>
+                <h2 style={{ margin: 0 }}>Compartilhar obra</h2>
+                <p style={{ margin: "8px 0 0", color: "#6b7280" }}>
+                  {sharingProject.nome}
+                </p>
+              </div>
+
+              <button
+                type="button"
+                className="rdo-btn rdo-btn-secondary"
+                onClick={closeShareModal}
+              >
+                Fechar
+              </button>
+            </div>
+
+            <form onSubmit={handleShareProject}>
+              <div className="rdo-field">
+                <label className="rdo-label">E-mail do usuário</label>
+                <input
+                  className="rdo-input"
+                  type="email"
+                  placeholder="usuario@exemplo.com"
+                  value={shareEmail}
+                  onChange={(e) => setShareEmail(e.target.value)}
+                />
+              </div>
+
+              <div className="rdo-field">
+                <label className="rdo-label">Permissão</label>
+                <select
+                  className="rdo-select"
+                  value={shareRole}
+                  onChange={(e) =>
+                    setShareRole(e.target.value as "viewer" | "editor")
+                  }
+                >
+                  <option value="viewer">Visualização</option>
+                  <option value="editor">Editor</option>
+                </select>
+              </div>
+
+              <p
+                style={{
+                  marginTop: 6,
+                  marginBottom: 16,
+                  color: "#6b7280",
+                  fontSize: 14,
+                  lineHeight: 1.6,
+                }}
+              >
+                Visualização: pode ver registros, fotos, NF's e gerar PDF. <br />
+                Editor: pode visualizar e também editar a obra e criar registros.
+              </p>
+
+              {shareMessage && (
+                <div
+                  className={
+                    shareMessage.includes("sucesso")
+                      ? "auth-success"
+                      : "auth-error"
+                  }
+                  style={{ marginBottom: 16 }}
+                >
+                  {shareMessage}
+                </div>
+              )}
+
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "flex-end",
+                  gap: 12,
+                  flexWrap: "wrap",
+                }}
+              >
+                <button
+                  type="button"
+                  className="rdo-btn rdo-btn-secondary"
+                  onClick={closeShareModal}
+                  disabled={shareLoading}
+                >
+                  Cancelar
+                </button>
+
+                <button
+                  type="submit"
+                  className="rdo-btn rdo-btn-primary"
+                  disabled={shareLoading}
+                >
+                  {shareLoading ? "Compartilhando..." : "Compartilhar"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
