@@ -55,7 +55,7 @@ export default function ObrasPage() {
     const { data: projectsData, error: projectsError } = await supabase
       .from("projects")
       .select("id, name, client_name, address, user_id, created_at")
-      .eq("user_id", user.id)
+      .or(`user_id.eq.${user.id},id.in.(select project_id from project_members where user_id='${user.id}')`)
       .order("created_at", { ascending: false });
 
     if (projectsError) {

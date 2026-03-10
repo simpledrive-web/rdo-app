@@ -761,3 +761,52 @@ select {
   color: var(--rdo-muted);
   line-height: 1.7;
 }
+
+:root {
+
+  --rdo-primary: #2563eb;
+  --rdo-primary-soft: #eff6ff;
+
+  --rdo-green: #16a34a;
+  --rdo-red: #dc2626;
+
+  --rdo-gray-100: #f9fafb;
+  --rdo-gray-200: #e5e7eb;
+  --rdo-gray-500: #6b7280;
+}
+
+.rdo-card {
+  background: white;
+  border: 1px solid var(--rdo-gray-200);
+  border-radius: 14px;
+  padding: 20px;
+}
+
+.rdo-btn-primary {
+  background: var(--rdo-primary);
+  color: white;
+  border-radius: 10px;
+}
+
+.rdo-btn-primary:hover {
+  opacity: 0.9;
+}
+
+.rdo-btn-secondary {
+  background: var(--rdo-gray-100);
+  border: 1px solid var(--rdo-gray-200);
+}
+
+.rdo-btn-danger {
+  background: var(--rdo-red);
+  color: white;
+}
+
+.rdo-badge {
+  background: var(--rdo-primary-soft);
+  color: var(--rdo-primary);
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+}
