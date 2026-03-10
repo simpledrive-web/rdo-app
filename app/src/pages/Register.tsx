@@ -1,8 +1,11 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { Capacitor } from "@capacitor/core";
+import { Browser } from "@capacitor/browser";
 import { supabase } from "../supabase/client";
 
 const appUrl = import.meta.env.VITE_APP_URL;
+const nativeAppScheme = "com.isaias.rdoapp";
 
 export default function Register() {
   const navigate = useNavigate();
@@ -36,9 +39,11 @@ export default function Register() {
 
     setLoading(true);
 
-    const redirectTo = appUrl
-      ? `${appUrl}/login`
-      : `${window.location.origin}/login`;
+    const redirectTo = Capacitor.isNativePlatform()
+      ? `${nativeAppScheme}://login`
+      : appUrl
+        ? `${appUrl}/login`
+        : `${window.location.origin}/login`;
 
     const { error } = await supabase.auth.signUp({
       email: email.trim(),
@@ -75,19 +80,28 @@ export default function Register() {
       setSuccessMessage("");
       setGoogleLoading(true);
 
-      const redirectTo = appUrl
-        ? `${appUrl}/dashboard`
-        : `${window.location.origin}/dashboard`;
+      const isNative = Capacitor.isNativePlatform();
+      const redirectTo = isNative
+        ? `${nativeAppScheme}://auth/callback`
+        : appUrl
+          ? `${appUrl}/dashboard`
+          : `${window.location.origin}/dashboard`;
 
-      const { error } = await supabase.auth.signInWithOAuth({
+      const { data, error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
           redirectTo,
+          skipBrowserRedirect: isNative,
         },
       });
 
       if (error) {
         setErrorMessage(error.message);
+        return;
+      }
+
+      if (isNative && data?.url) {
+        await Browser.open({ url: data.url });
       }
     } finally {
       setGoogleLoading(false);

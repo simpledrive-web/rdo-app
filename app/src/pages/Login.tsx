@@ -1,8 +1,11 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { Capacitor } from "@capacitor/core";
+import { Browser } from "@capacitor/browser";
 import { supabase } from "../supabase/client";
 
 const appUrl = import.meta.env.VITE_APP_URL;
+const nativeAppScheme = "com.isaias.rdoapp";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -40,19 +43,28 @@ export default function Login() {
       setMessage("");
       setGoogleLoading(true);
 
-      const redirectTo = appUrl
-        ? `${appUrl}/dashboard`
-        : `${window.location.origin}/dashboard`;
+      const isNative = Capacitor.isNativePlatform();
+      const redirectTo = isNative
+        ? `${nativeAppScheme}://auth/callback`
+        : appUrl
+          ? `${appUrl}/dashboard`
+          : `${window.location.origin}/dashboard`;
 
-      const { error } = await supabase.auth.signInWithOAuth({
+      const { data, error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
           redirectTo,
+          skipBrowserRedirect: isNative,
         },
       });
 
       if (error) {
         setMessage(error.message);
+        return;
+      }
+
+      if (isNative && data?.url) {
+        await Browser.open({ url: data.url });
       }
     } finally {
       setGoogleLoading(false);
@@ -69,9 +81,11 @@ export default function Login() {
       setMessage("");
       setRecoveryLoading(true);
 
-      const redirectTo = appUrl
-        ? `${appUrl}/reset-password`
-        : `${window.location.origin}/reset-password`;
+      const redirectTo = Capacitor.isNativePlatform()
+        ? `${nativeAppScheme}://reset-password`
+        : appUrl
+          ? `${appUrl}/reset-password`
+          : `${window.location.origin}/reset-password`;
 
       const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
         redirectTo,
