@@ -426,15 +426,6 @@ export default function ObraDetalhePage() {
               <div><strong>Clima tarde:</strong> ${log.weather_afternoon || "-"}</div>
               <div><strong>Responsável:</strong> ${log.responsible_name || "-"}</div>
             </div>
-
-            ${
-              log.signature_data
-                ? `<div class="box">
-                    <strong>Assinatura</strong><br />
-                    <img class="signature" src="${log.signature_data}" />
-                  </div>`
-                : ""
-            }
           </div>
 
           <div class="section">

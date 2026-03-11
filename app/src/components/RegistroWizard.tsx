@@ -1,7 +1,6 @@
 import { useMemo, useState, type ChangeEvent } from "react";
 import { supabase } from "../supabase/client";
 import StepIndicator from "./StepIndicator";
-import SignaturePad from "./SignaturePad";
 
 type Funcionario = {
   nome: string;
@@ -78,7 +77,6 @@ export default function RegistroWizard({
   const [resumo, setResumo] = useState("");
   const [ocorrencias, setOcorrencias] = useState("");
   const [responsavelNome, setResponsavelNome] = useState("");
-  const [assinatura, setAssinatura] = useState("");
 
   const [funcionarios, setFuncionarios] = useState<Funcionario[]>([
     { nome: "", funcao: "" },
@@ -211,7 +209,6 @@ export default function RegistroWizard({
     setResumo("");
     setOcorrencias("");
     setResponsavelNome("");
-    setAssinatura("");
     setFuncionarios([{ nome: "", funcao: "" }]);
     setServicos([{ descricao: "", status: "" }]);
     setFotos([]);
@@ -285,7 +282,6 @@ export default function RegistroWizard({
           next_steps: null,
           register_number: registerNumber,
           responsible_name: responsavelNome.trim() || null,
-          signature_data: assinatura || null,
           created_by: authData.user.id,
         })
         .select("id")
@@ -307,7 +303,6 @@ export default function RegistroWizard({
           issues: ocorrencias.trim() || null,
           register_number: registerNumber,
           responsible_name: responsavelNome.trim() || null,
-          signature_data: assinatura || null,
         })
         .eq("id", dailyLogId);
 
@@ -515,11 +510,6 @@ export default function RegistroWizard({
             <p><strong>Clima manhã:</strong> ${climaManha || "-"}</p>
             <p><strong>Clima tarde:</strong> ${climaTarde || "-"}</p>
             <p><strong>Responsável:</strong> ${responsavelNome || "-"}</p>
-            ${
-              assinatura
-                ? `<div><strong>Assinatura:</strong><br /><img class="signature" src="${assinatura}" /></div>`
-                : ""
-            }
           </div>
 
           <div class="box">
@@ -653,11 +643,6 @@ export default function RegistroWizard({
               onChange={(e) => setResponsavelNome(e.target.value)}
               placeholder="Digite o nome do responsável"
             />
-          </div>
-
-          <div className="rdo-field">
-            <label className="rdo-label">Assinatura</label>
-            <SignaturePad value={assinatura} onChange={setAssinatura} />
           </div>
 
           <div className="rdo-field">
