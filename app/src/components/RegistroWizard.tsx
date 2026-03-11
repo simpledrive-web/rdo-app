@@ -5,18 +5,23 @@ import StepIndicator from "./StepIndicator";
 type Funcionario = {
   nome: string;
   funcao: string;
-  horas: string;
-};
-
-type NotaFiscal = {
-  numero: string;
-  descricao: string;
-  arquivo: File | null;
 };
 
 type Servico = {
   descricao: string;
   status: string;
+};
+
+type FotoItem = {
+  arquivo: File;
+  legenda: string;
+};
+
+type NFItem = {
+  estabelecimento: string;
+  numero: string;
+  descricao: string;
+  arquivo: File | null;
 };
 
 type ProjectInfo = {
@@ -31,10 +36,15 @@ type RegistroWizardProps = {
   onSaved?: () => Promise<void> | void;
 };
 
-const NF_BUCKET = "nota-fiscais";
-const NF_TABLE = "invoice_files";
-const NF_ACCEPT =
-  ".jpg,.jpeg,.png,.pdf,.txt,.doc,.doc,.docx,application/pdf,image/jpeg,image/png,text/plain,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+const STATUS_SERVICO = [
+  "Não iniciado",
+  "Iniciado",
+  "Em andamento",
+  "Paralisado",
+  "Concluído",
+];
+
+const OPCOES_CLIMA = ["Sol", "Nublado", "Chuvoso"];
 
 export default function RegistroWizard({
   project,
@@ -44,23 +54,24 @@ export default function RegistroWizard({
   const [saving, setSaving] = useState(false);
 
   const [data, setData] = useState("");
-  const [clima, setClima] = useState("");
+  const [climaManha, setClimaManha] = useState("");
+  const [climaTarde, setClimaTarde] = useState("");
   const [resumo, setResumo] = useState("");
   const [ocorrencias, setOcorrencias] = useState("");
 
   const [funcionarios, setFuncionarios] = useState<Funcionario[]>([
-    { nome: "", funcao: "", horas: "" },
-  ]);
-
-  const [notasFiscais, setNotasFiscais] = useState<NotaFiscal[]>([
-    { numero: "", descricao: "", arquivo: null },
+    { nome: "", funcao: "" },
   ]);
 
   const [servicos, setServicos] = useState<Servico[]>([
     { descricao: "", status: "" },
   ]);
 
-  const [fotos, setFotos] = useState<File[]>([]);
+  const [fotos, setFotos] = useState<FotoItem[]>([]);
+
+  const [nfs, setNfs] = useState<NFItem[]>([
+    { estabelecimento: "", numero: "", descricao: "", arquivo: null },
+  ]);
 
   function nextStep() {
     if (step < 5) setStep((prev) => prev + 1);
@@ -81,53 +92,14 @@ export default function RegistroWizard({
   }
 
   function addFuncionario() {
-    setFuncionarios((prev) => [...prev, { nome: "", funcao: "", horas: "" }]);
+    setFuncionarios((prev) => [...prev, { nome: "", funcao: "" }]);
   }
 
   function removeFuncionario(index: number) {
     setFuncionarios((prev) => prev.filter((_, i) => i !== index));
   }
 
-  function updateNotaFiscal(
-    index: number,
-    field: keyof Omit<NotaFiscal, "arquivo">,
-    value: string
-  ) {
-    const updated = [...notasFiscais];
-    updated[index][field] = value;
-    setNotasFiscais(updated);
-  }
-
-  function updateNotaFiscalArquivo(index: number, file: File | null) {
-    const updated = [...notasFiscais];
-    updated[index].arquivo = file;
-    setNotasFiscais(updated);
-  }
-
-  function addNotaFiscal() {
-    setNotasFiscais((prev) => [
-      ...prev,
-      { numero: "", descricao: "", arquivo: null },
-    ]);
-  }
-
-  function removeNotaFiscal(index: number) {
-    setNotasFiscais((prev) => prev.filter((_, i) => i !== index));
-  }
-
-  function handleNotaFiscalFileChange(
-    index: number,
-    event: ChangeEvent<HTMLInputElement>
-  ) {
-    const file = event.target.files?.[0] ?? null;
-    updateNotaFiscalArquivo(index, file);
-  }
-
-  function updateServico(
-    index: number,
-    field: keyof Servico,
-    value: string
-  ) {
+  function updateServico(index: number, field: keyof Servico, value: string) {
     const updated = [...servicos];
     updated[index][field] = value;
     setServicos(updated);
@@ -145,27 +117,60 @@ export default function RegistroWizard({
     const files = event.target.files;
     if (!files) return;
 
-    setFotos((prev) => [...prev, ...Array.from(files)]);
+    const novosItens: FotoItem[] = Array.from(files).map((file) => ({
+      arquivo: file,
+      legenda: "",
+    }));
+
+    setFotos((prev) => [...prev, ...novosItens]);
+  }
+
+  function updatePhotoCaption(index: number, legenda: string) {
+    setFotos((prev) =>
+      prev.map((item, i) => (i === index ? { ...item, legenda } : item))
+    );
   }
 
   function removePhoto(index: number) {
     setFotos((prev) => prev.filter((_, i) => i !== index));
   }
 
+  function updateNF(index: number, field: keyof NFItem, value: string | File | null) {
+    const updated = [...nfs];
+    if (field === "arquivo") {
+      updated[index].arquivo = value as File | null;
+    } else {
+      (updated[index][field] as string) = value as string;
+    }
+    setNfs(updated);
+  }
+
+  function addNF() {
+    setNfs((prev) => [
+      ...prev,
+      { estabelecimento: "", numero: "", descricao: "", arquivo: null },
+    ]);
+  }
+
+  function removeNF(index: number) {
+    setNfs((prev) => prev.filter((_, i) => i !== index));
+  }
+
   const photoUrls = useMemo(() => {
-    return fotos.map((file) => URL.createObjectURL(file));
+    return fotos.map((item) => URL.createObjectURL(item.arquivo));
   }, [fotos]);
 
   function resetForm() {
     setStep(1);
     setData("");
-    setClima("");
+    setClimaManha("");
+    setClimaTarde("");
     setResumo("");
     setOcorrencias("");
-    setFuncionarios([{ nome: "", funcao: "", horas: "" }]);
-    setNotasFiscais([{ numero: "", descricao: "", arquivo: null }]);
+    setFuncionarios([{ nome: "", funcao: "" }]);
     setServicos([{ descricao: "", status: "" }]);
     setFotos([]);
+    setNfs([{ estabelecimento: "", numero: "", descricao: "", arquivo: null }]);
   }
 
   async function persistRegistro() {
@@ -183,25 +188,66 @@ export default function RegistroWizard({
       throw new Error("Usuário não autenticado.");
     }
 
-    const { data: dailyLog, error: dailyLogError } = await supabase
-      .from("daily_logs")
-      .insert({
-        project_id: project.id,
-        log_date: data,
-        weather: clima.trim() || null,
-        summary: resumo.trim() || null,
-        issues: ocorrencias.trim() || null,
-        next_steps: null,
-        created_by: authData.user.id,
-      })
-      .select("id")
-      .single();
+    const { data: existingDailyLog, error: existingDailyLogError } =
+      await supabase
+        .from("daily_logs")
+        .select("id")
+        .eq("project_id", project.id)
+        .eq("log_date", data)
+        .maybeSingle();
 
-    if (dailyLogError || !dailyLog) {
-      throw new Error(dailyLogError?.message || "Erro ao salvar registro.");
+    if (existingDailyLogError) {
+      throw new Error(
+        existingDailyLogError.message ||
+          "Erro ao verificar registro existente."
+      );
     }
 
-    const dailyLogId = dailyLog.id;
+    let dailyLogId = existingDailyLog?.id;
+
+    if (!dailyLogId) {
+      const { data: newDailyLog, error: dailyLogError } = await supabase
+        .from("daily_logs")
+        .insert({
+          project_id: project.id,
+          log_date: data,
+          weather: null,
+          weather_morning: climaManha || null,
+          weather_afternoon: climaTarde || null,
+          summary: resumo.trim() || null,
+          issues: ocorrencias.trim() || null,
+          next_steps: null,
+          created_by: authData.user.id,
+        })
+        .select("id")
+        .single();
+
+      if (dailyLogError || !newDailyLog) {
+        throw new Error(dailyLogError?.message || "Erro ao salvar registro.");
+      }
+
+      dailyLogId = newDailyLog.id;
+    } else {
+      const { error: updateDailyLogError } = await supabase
+        .from("daily_logs")
+        .update({
+          weather: null,
+          weather_morning: climaManha || null,
+          weather_afternoon: climaTarde || null,
+          summary: resumo.trim() || null,
+          issues: ocorrencias.trim() || null,
+        })
+        .eq("id", dailyLogId);
+
+      if (updateDailyLogError) {
+        throw new Error(
+          updateDailyLogError.message ||
+            "Erro ao atualizar registro existente."
+        );
+      }
+    }
+
+    await supabase.from("crew_entries").delete().eq("daily_log_id", dailyLogId);
 
     const crewPayload = funcionarios
       .filter((item) => item.nome.trim())
@@ -209,7 +255,7 @@ export default function RegistroWizard({
         daily_log_id: dailyLogId,
         name: item.nome.trim(),
         role: item.funcao.trim() || null,
-        hours: item.horas.trim() ? Number(item.horas) : null,
+        hours: null,
       }));
 
     if (crewPayload.length > 0) {
@@ -228,70 +274,21 @@ export default function RegistroWizard({
       })
       .join(" | ");
 
-    if (serviceSummary) {
-      const { error } = await supabase
-        .from("daily_logs")
-        .update({
-          next_steps: serviceSummary,
-        })
-        .eq("id", dailyLogId);
+    const { error: updateServiceError } = await supabase
+      .from("daily_logs")
+      .update({
+        next_steps: serviceSummary || null,
+      })
+      .eq("id", dailyLogId);
 
-      if (error) {
-        throw new Error(`Erro ao salvar serviços: ${error.message}`);
-      }
+    if (updateServiceError) {
+      throw new Error(`Erro ao salvar serviços: ${updateServiceError.message}`);
     }
 
-    const notasValidas = notasFiscais.filter(
-      (item) =>
-        item.numero.trim() || item.descricao.trim() || item.arquivo !== null
-    );
-
-    for (const nf of notasValidas) {
-      if (!nf.arquivo) {
-        throw new Error(
-          `Selecione o arquivo da NF "${nf.numero || nf.descricao || "sem identificação"}".`
-        );
-      }
-
-      const ext = nf.arquivo.name.split(".").pop()?.toLowerCase() || "file";
-      const safeNumber = (nf.numero || "sem-numero")
-        .trim()
-        .replace(/[^\w\-]+/g, "_");
-      const fileName = `${project.id}/${dailyLogId}/${Date.now()}-${Math.random()
-        .toString(36)
-        .slice(2)}-${safeNumber}.${ext}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from(NF_BUCKET)
-        .upload(fileName, nf.arquivo, {
-          cacheControl: "3600",
-          upsert: false,
-        });
-
-      if (uploadError) {
-        throw new Error(`Erro no upload da NF: ${uploadError.message}`);
-      }
-
-      const { error: nfInsertError } = await supabase.from(NF_TABLE).insert({
-        project_id: project.id,
-        daily_log_id: dailyLogId,
-        invoice_number: nf.numero.trim() || null,
-        description: nf.descricao.trim() || null,
-        original_file_name: nf.arquivo.name,
-        storage_path: fileName,
-        mime_type: nf.arquivo.type || null,
-        file_size: nf.arquivo.size,
-        uploaded_by: authData.user.id,
-      });
-
-      if (nfInsertError) {
-        throw new Error(`Erro ao salvar nota fiscal: ${nfInsertError.message}`);
-      }
-    }
-
-    for (const foto of fotos) {
+    for (const fotoItem of fotos) {
+      const foto = fotoItem.arquivo;
       const ext = foto.name.split(".").pop();
-      const fileName = `${dailyLogId}/${Date.now()}-${Math.random()
+      const fileName = `${dailyLogId}/fotos/${Date.now()}-${Math.random()
         .toString(36)
         .slice(2)}.${ext}`;
 
@@ -309,12 +306,49 @@ export default function RegistroWizard({
       const { error: photoInsertError } = await supabase.from("photos").insert({
         daily_log_id: dailyLogId,
         storage_path: fileName,
-        caption: null,
+        caption: fotoItem.legenda.trim() || null,
         taken_at: new Date().toISOString(),
       });
 
       if (photoInsertError) {
         throw new Error(`Erro ao salvar foto: ${photoInsertError.message}`);
+      }
+    }
+
+    for (const nf of nfs) {
+      if (!nf.arquivo) continue;
+
+      const ext = nf.arquivo.name.split(".").pop();
+      const fileName = `${dailyLogId}/nfs/${Date.now()}-${Math.random()
+        .toString(36)
+        .slice(2)}.${ext}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("nota-fiscais")
+        .upload(fileName, nf.arquivo, {
+          cacheControl: "3600",
+          upsert: false,
+        });
+
+      if (uploadError) {
+        throw new Error(`Erro no upload da NF: ${uploadError.message}`);
+      }
+
+      const { error: nfInsertError } = await supabase.from("invoice_files").insert({
+        project_id: project.id,
+        daily_log_id: dailyLogId,
+        establishment_name: nf.estabelecimento.trim() || null,
+        invoice_number: nf.numero.trim() || null,
+        description: nf.descricao.trim() || null,
+        original_file_name: nf.arquivo.name,
+        storage_path: fileName,
+        mime_type: nf.arquivo.type || null,
+        file_size: nf.arquivo.size,
+        uploaded_by: authData.user.id,
+      });
+
+      if (nfInsertError) {
+        throw new Error(`Erro ao salvar NF: ${nfInsertError.message}`);
       }
     }
 
@@ -324,25 +358,7 @@ export default function RegistroWizard({
   function buildPrintableHtml() {
     const funcionariosHtml = funcionarios
       .filter((f) => f.nome.trim())
-      .map(
-        (f) =>
-          `<li><strong>${f.nome}</strong> - ${f.funcao || "-"} - ${f.horas || "-"}h</li>`
-      )
-      .join("");
-
-    const notasFiscaisHtml = notasFiscais
-      .filter((nf) => nf.numero.trim() || nf.descricao.trim() || nf.arquivo)
-      .map((nf) => {
-        const partes = [
-          nf.numero.trim() ? `<strong>Nº:</strong> ${nf.numero.trim()}` : "",
-          nf.descricao.trim()
-            ? `<strong>Descrição:</strong> ${nf.descricao.trim()}`
-            : "",
-          nf.arquivo ? `<strong>Arquivo:</strong> ${nf.arquivo.name}` : "",
-        ].filter(Boolean);
-
-        return `<li>${partes.join(" | ")}</li>`;
-      })
+      .map((f) => `<li><strong>${f.nome}</strong> - ${f.funcao || "-"}</li>`)
       .join("");
 
     const servicosHtml = servicos
@@ -353,13 +369,27 @@ export default function RegistroWizard({
       )
       .join("");
 
-    const fotosHtml = photoUrls
+    const nfsHtml = nfs
+      .filter((n) => n.estabelecimento.trim() || n.numero.trim() || n.descricao.trim() || n.arquivo)
       .map(
-        (url) =>
-          `<div style="break-inside: avoid; margin-bottom: 12px;">
-            <img src="${url}" style="width: 100%; max-width: 320px; border-radius: 10px; border: 1px solid #ddd;" />
-          </div>`
+        (n) =>
+          `<li>
+            <strong>Estabelecimento:</strong> ${n.estabelecimento || "-"}<br />
+            <strong>Número da NF:</strong> ${n.numero || "-"}<br />
+            <strong>Descrição:</strong> ${n.descricao || "-"}<br />
+            <strong>Arquivo:</strong> ${n.arquivo?.name || "-"}
+          </li>`
       )
+      .join("");
+
+    const fotosHtml = fotos
+      .map((item, index) => {
+        const url = photoUrls[index];
+        return `<div style="break-inside: avoid; margin-bottom: 16px;">
+            <img src="${url}" style="width: 100%; max-width: 320px; border-radius: 10px; border: 1px solid #ddd;" />
+            <p style="margin-top: 8px;"><strong>Legenda:</strong> ${item.legenda || "-"}</p>
+          </div>`;
+      })
       .join("");
 
     return `
@@ -394,7 +424,8 @@ export default function RegistroWizard({
             <p><strong>Cliente:</strong> ${project.cliente || "-"}</p>
             <p><strong>Endereço:</strong> ${project.endereco || "-"}</p>
             <p><strong>Data:</strong> ${data || "-"}</p>
-            <p><strong>Clima:</strong> ${clima || "-"}</p>
+            <p><strong>Clima manhã:</strong> ${climaManha || "-"}</p>
+            <p><strong>Clima tarde:</strong> ${climaTarde || "-"}</p>
           </div>
 
           <div class="box">
@@ -413,11 +444,6 @@ export default function RegistroWizard({
           </div>
 
           <div class="box">
-            <h3>NF's</h3>
-            <ul>${notasFiscaisHtml || "<li>Nenhuma</li>"}</ul>
-          </div>
-
-          <div class="box">
             <h3>Serviços</h3>
             <ul>${servicosHtml || "<li>Nenhum</li>"}</ul>
           </div>
@@ -425,6 +451,11 @@ export default function RegistroWizard({
           <div class="box">
             <h3>Fotos</h3>
             ${fotosHtml || "<p>Nenhuma foto adicionada.</p>"}
+          </div>
+
+          <div class="box">
+            <h3>NF's</h3>
+            <ul>${nfsHtml || "<li>Nenhuma</li>"}</ul>
           </div>
         </body>
       </html>
@@ -488,14 +519,36 @@ export default function RegistroWizard({
             </div>
 
             <div className="rdo-field">
-              <label className="rdo-label">Clima</label>
-              <input
-                className="rdo-input"
-                placeholder="Ex: Sol, Nublado, Chuva"
-                value={clima}
-                onChange={(e) => setClima(e.target.value)}
-              />
+              <label className="rdo-label">Clima (manhã)</label>
+              <select
+                className="rdo-select"
+                value={climaManha}
+                onChange={(e) => setClimaManha(e.target.value)}
+              >
+                <option value="">Selecione</option>
+                {OPCOES_CLIMA.map((opcao) => (
+                  <option key={opcao} value={opcao}>
+                    {opcao}
+                  </option>
+                ))}
+              </select>
             </div>
+          </div>
+
+          <div className="rdo-field">
+            <label className="rdo-label">Clima (tarde)</label>
+            <select
+              className="rdo-select"
+              value={climaTarde}
+              onChange={(e) => setClimaTarde(e.target.value)}
+            >
+              <option value="">Selecione</option>
+              {OPCOES_CLIMA.map((opcao) => (
+                <option key={opcao} value={opcao}>
+                  {opcao}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div className="rdo-field">
@@ -535,7 +588,7 @@ export default function RegistroWizard({
           <div className="rdo-repeat-list">
             {funcionarios.map((funcionario, index) => (
               <div className="rdo-repeat-item" key={index}>
-                <div className="rdo-repeat-fields-3">
+                <div className="rdo-repeat-fields-2">
                   <div className="rdo-field">
                     <label className="rdo-label">Nome</label>
                     <input
@@ -554,17 +607,6 @@ export default function RegistroWizard({
                       value={funcionario.funcao}
                       onChange={(e) =>
                         updateFuncionario(index, "funcao", e.target.value)
-                      }
-                    />
-                  </div>
-
-                  <div className="rdo-field">
-                    <label className="rdo-label">Horas</label>
-                    <input
-                      className="rdo-input"
-                      value={funcionario.horas}
-                      onChange={(e) =>
-                        updateFuncionario(index, "horas", e.target.value)
                       }
                     />
                   </div>
@@ -587,83 +629,6 @@ export default function RegistroWizard({
       )}
 
       {step === 3 && (
-        <>
-          <div className="rdo-add-row">
-            <button
-              type="button"
-              className="rdo-btn rdo-btn-secondary"
-              onClick={addNotaFiscal}
-            >
-              + Adicionar NF
-            </button>
-          </div>
-
-          <div className="rdo-repeat-list">
-            {notasFiscais.map((nf, index) => (
-              <div className="rdo-repeat-item" key={index}>
-                <div className="rdo-form-grid">
-                  <div className="rdo-repeat-fields-2">
-                    <div className="rdo-field">
-                      <label className="rdo-label">Número da NF</label>
-                      <input
-                        className="rdo-input"
-                        value={nf.numero}
-                        onChange={(e) =>
-                          updateNotaFiscal(index, "numero", e.target.value)
-                        }
-                      />
-                    </div>
-
-                    <div className="rdo-field">
-                      <label className="rdo-label">Descrição</label>
-                      <input
-                        className="rdo-input"
-                        placeholder="Ex: Compra de cimento, areia, ferragem..."
-                        value={nf.descricao}
-                        onChange={(e) =>
-                          updateNotaFiscal(index, "descricao", e.target.value)
-                        }
-                      />
-                    </div>
-                  </div>
-
-                  <div className="rdo-field">
-                    <label className="rdo-label">Arquivo da NF</label>
-                    <input
-                      className="rdo-input"
-                      type="file"
-                      accept={NF_ACCEPT}
-                      onChange={(e) => handleNotaFiscalFileChange(index, e)}
-                    />
-                    <p className="rdo-form-subtitle" style={{ marginTop: 8 }}>
-                      Formatos aceitos: JPG, JPEG, PNG, PDF, TXT, DOC e DOCX.
-                    </p>
-
-                    {nf.arquivo && (
-                      <p className="rdo-form-subtitle" style={{ marginTop: 8 }}>
-                        Arquivo selecionado: <strong>{nf.arquivo.name}</strong>
-                      </p>
-                    )}
-                  </div>
-                </div>
-
-                <div className="rdo-repeat-actions">
-                  <button
-                    type="button"
-                    className="rdo-btn rdo-btn-danger rdo-remove-btn"
-                    onClick={() => removeNotaFiscal(index)}
-                    disabled={notasFiscais.length === 1}
-                  >
-                    Remover
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </>
-      )}
-
-      {step === 4 && (
         <>
           <div className="rdo-add-row">
             <button
@@ -700,9 +665,11 @@ export default function RegistroWizard({
                       }
                     >
                       <option value="">Selecione</option>
-                      <option value="Não iniciado">Não iniciado</option>
-                      <option value="Em andamento">Em andamento</option>
-                      <option value="Concluído">Concluído</option>
+                      {STATUS_SERVICO.map((status) => (
+                        <option key={status} value={status}>
+                          {status}
+                        </option>
+                      ))}
                     </select>
                   </div>
                 </div>
@@ -723,7 +690,7 @@ export default function RegistroWizard({
         </>
       )}
 
-      {step === 5 && (
+      {step === 4 && (
         <>
           <div className="rdo-photo-upload-box">
             <div className="rdo-field">
@@ -738,7 +705,8 @@ export default function RegistroWizard({
             </div>
 
             <p className="rdo-form-subtitle" style={{ marginBottom: 0 }}>
-              Adicione as imagens do andamento da obra. Essa será a última etapa.
+              Adicione as imagens do andamento da obra e escreva uma legenda para
+              cada foto.
             </p>
           </div>
 
@@ -750,11 +718,113 @@ export default function RegistroWizard({
             {photoUrls.map((url, index) => (
               <div className="rdo-photo-item" key={index}>
                 <img src={url} alt={`Foto ${index + 1}`} />
+
+                <div style={{ padding: 12 }}>
+                  <div className="rdo-field">
+                    <label className="rdo-label">Legenda</label>
+                    <textarea
+                      className="rdo-textarea"
+                      placeholder="Descreva a foto"
+                      value={fotos[index].legenda}
+                      onChange={(e) =>
+                        updatePhotoCaption(index, e.target.value)
+                      }
+                    />
+                  </div>
+                </div>
+
                 <div className="rdo-photo-item-footer">
                   <button
                     type="button"
                     className="rdo-btn rdo-btn-danger"
                     onClick={() => removePhoto(index)}
+                  >
+                    Remover
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      {step === 5 && (
+        <>
+          <div className="rdo-add-row">
+            <button
+              type="button"
+              className="rdo-btn rdo-btn-secondary"
+              onClick={addNF}
+            >
+              + Adicionar NF
+            </button>
+          </div>
+
+          <div className="rdo-repeat-list">
+            {nfs.map((nf, index) => (
+              <div className="rdo-repeat-item" key={index}>
+                <div className="rdo-form-grid">
+                  <div className="rdo-repeat-fields-2">
+                    <div className="rdo-field">
+                      <label className="rdo-label">Nome do estabelecimento</label>
+                      <input
+                        className="rdo-input"
+                        value={nf.estabelecimento}
+                        onChange={(e) =>
+                          updateNF(index, "estabelecimento", e.target.value)
+                        }
+                      />
+                    </div>
+
+                    <div className="rdo-field">
+                      <label className="rdo-label">Número da NF</label>
+                      <input
+                        className="rdo-input"
+                        value={nf.numero}
+                        onChange={(e) =>
+                          updateNF(index, "numero", e.target.value)
+                        }
+                      />
+                    </div>
+                  </div>
+
+                  <div className="rdo-field">
+                    <label className="rdo-label">Descrição</label>
+                    <textarea
+                      className="rdo-textarea"
+                      placeholder="Descreva a NF"
+                      value={nf.descricao}
+                      onChange={(e) =>
+                        updateNF(index, "descricao", e.target.value)
+                      }
+                    />
+                  </div>
+
+                  <div className="rdo-field">
+                    <label className="rdo-label">Arquivo da NF</label>
+                    <input
+                      className="rdo-input"
+                      type="file"
+                      accept=".jpg,.jpeg,.png,.pdf,.txt,.doc,.docx"
+                      onChange={(e) =>
+                        updateNF(index, "arquivo", e.target.files?.[0] ?? null)
+                      }
+                    />
+                  </div>
+
+                  {nf.arquivo && (
+                    <p className="rdo-form-subtitle" style={{ marginBottom: 0 }}>
+                      Arquivo selecionado: <strong>{nf.arquivo.name}</strong>
+                    </p>
+                  )}
+                </div>
+
+                <div className="rdo-repeat-actions">
+                  <button
+                    type="button"
+                    className="rdo-btn rdo-btn-danger rdo-remove-btn"
+                    onClick={() => removeNF(index)}
+                    disabled={nfs.length === 1}
                   >
                     Remover
                   </button>

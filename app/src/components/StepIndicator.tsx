@@ -5,9 +5,9 @@ type StepIndicatorProps = {
 const steps = [
   "Registro",
   "Funcionários",
-  "NF's",
   "Serviços",
   "Fotos",
+  "NF's",
 ];
 
 export default function StepIndicator({ currentStep }: StepIndicatorProps) {
