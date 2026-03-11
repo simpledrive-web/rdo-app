@@ -6,11 +6,6 @@ const config: CapacitorConfig = {
   webDir: "dist",
   server: {
     androidScheme: "https"
-  },
-  plugins: {
-    App: {
-      urlScheme: "rdoapp"
-    }
   }
 };
 

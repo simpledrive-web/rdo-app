@@ -7,6 +7,7 @@ import { Browser } from "@capacitor/browser";
 import App from "./App";
 import { supabase } from "./supabase/client";
 import "./index.css";
+import "./styles.css";
 
 function getTokensFromUrl(url: string) {
   try {

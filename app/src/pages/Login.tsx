@@ -66,6 +66,9 @@ export default function Login() {
       if (isNative && data?.url) {
         await Browser.open({ url: data.url });
       }
+    } catch (error) {
+      console.error(error);
+      setMessage("Erro ao iniciar login com Google.");
     } finally {
       setGoogleLoading(false);
     }
