@@ -46,6 +46,23 @@ const STATUS_SERVICO = [
 
 const OPCOES_CLIMA = ["Sol", "Nublado", "Chuvoso"];
 
+function extractInvoiceNumberFromFileName(fileName: string) {
+  const cleaned = fileName.replace(/\.[^/.]+$/, "");
+  const patterns = [
+    /(?:nf|nfe|nota)[^\d]{0,5}(\d{3,})/i,
+    /\b(\d{4,})\b/,
+  ];
+
+  for (const pattern of patterns) {
+    const match = cleaned.match(pattern);
+    if (match?.[1]) {
+      return match[1];
+    }
+  }
+
+  return "";
+}
+
 export default function RegistroWizard({
   project,
   onSaved,
@@ -137,11 +154,21 @@ export default function RegistroWizard({
 
   function updateNF(index: number, field: keyof NFItem, value: string | File | null) {
     const updated = [...nfs];
+
     if (field === "arquivo") {
-      updated[index].arquivo = value as File | null;
+      const file = value as File | null;
+      updated[index].arquivo = file;
+
+      if (file && !updated[index].numero.trim()) {
+        const detectedNumber = extractInvoiceNumberFromFileName(file.name);
+        if (detectedNumber) {
+          updated[index].numero = detectedNumber;
+        }
+      }
     } else {
       (updated[index][field] as string) = value as string;
     }
+
     setNfs(updated);
   }
 
@@ -365,12 +392,20 @@ export default function RegistroWizard({
       .filter((s) => s.descricao.trim())
       .map(
         (s) =>
-          `<li><strong>${s.descricao}</strong>${s.status ? ` - ${s.status}` : ""}</li>`
+          `<li><strong>${s.descricao}</strong>${
+            s.status ? ` - ${s.status}` : ""
+          }</li>`
       )
       .join("");
 
     const nfsHtml = nfs
-      .filter((n) => n.estabelecimento.trim() || n.numero.trim() || n.descricao.trim() || n.arquivo)
+      .filter(
+        (n) =>
+          n.estabelecimento.trim() ||
+          n.numero.trim() ||
+          n.descricao.trim() ||
+          n.arquivo
+      )
       .map(
         (n) =>
           `<li>
@@ -387,7 +422,9 @@ export default function RegistroWizard({
         const url = photoUrls[index];
         return `<div style="break-inside: avoid; margin-bottom: 16px;">
             <img src="${url}" style="width: 100%; max-width: 320px; border-radius: 10px; border: 1px solid #ddd;" />
-            <p style="margin-top: 8px;"><strong>Legenda:</strong> ${item.legenda || "-"}</p>
+            <p style="margin-top: 8px;"><strong>Legenda:</strong> ${
+              item.legenda || "-"
+            }</p>
           </div>`;
       })
       .join("");
@@ -507,7 +544,7 @@ export default function RegistroWizard({
 
       {step === 1 && (
         <div className="rdo-form-grid">
-          <div className="rdo-form-grid-2">
+          <div className="rdo-form-grid-3">
             <div className="rdo-field">
               <label className="rdo-label">Data</label>
               <input
@@ -533,22 +570,22 @@ export default function RegistroWizard({
                 ))}
               </select>
             </div>
-          </div>
 
-          <div className="rdo-field">
-            <label className="rdo-label">Clima (tarde)</label>
-            <select
-              className="rdo-select"
-              value={climaTarde}
-              onChange={(e) => setClimaTarde(e.target.value)}
-            >
-              <option value="">Selecione</option>
-              {OPCOES_CLIMA.map((opcao) => (
-                <option key={opcao} value={opcao}>
-                  {opcao}
-                </option>
-              ))}
-            </select>
+            <div className="rdo-field">
+              <label className="rdo-label">Clima (tarde)</label>
+              <select
+                className="rdo-select"
+                value={climaTarde}
+                onChange={(e) => setClimaTarde(e.target.value)}
+              >
+                <option value="">Selecione</option>
+                {OPCOES_CLIMA.map((opcao) => (
+                  <option key={opcao} value={opcao}>
+                    {opcao}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
           <div className="rdo-field">

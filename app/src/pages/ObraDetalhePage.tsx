@@ -14,7 +14,8 @@ type Project = {
 type DailyLog = {
   id: string;
   log_date: string;
-  weather: string | null;
+  weather_morning: string | null;
+  weather_afternoon: string | null;
   summary: string | null;
   issues: string | null;
   next_steps: string | null;
@@ -29,6 +30,7 @@ type CrewEntry = {
 
 type InvoiceFile = {
   id: string;
+  establishment_name: string | null;
   invoice_number: string | null;
   description: string | null;
   original_file_name: string;
@@ -50,14 +52,6 @@ type LogDetails = {
   photos: PhotoEntry[];
 };
 
-type LogStats = {
-  crewCount: number;
-  invoiceCount: number;
-  photoCount: number;
-};
-
-type AccessRole = "owner" | "viewer" | "editor" | "admin";
-
 export default function ObraDetalhePage() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -65,9 +59,6 @@ export default function ObraDetalhePage() {
   const [project, setProject] = useState<Project | null>(null);
   const [logs, setLogs] = useState<DailyLog[]>([]);
   const [loading, setLoading] = useState(true);
-  const [accessRole, setAccessRole] = useState<AccessRole>("viewer");
-
-  const [logStatsMap, setLogStatsMap] = useState<Record<string, LogStats>>({});
 
   const [selectedLog, setSelectedLog] = useState<DailyLog | null>(null);
   const [selectedLogDetails, setSelectedLogDetails] = useState<LogDetails | null>(
@@ -102,39 +93,28 @@ export default function ObraDetalhePage() {
       return;
     }
 
-    let currentAccessRole: AccessRole = "viewer";
-
-    if (projectData.user_id === user.id) {
-      currentAccessRole = "owner";
-    } else {
-      const { data: member, error: memberError } = await supabase
+    if (projectData.user_id !== user.id) {
+      const { data: sharedAccess } = await supabase
         .from("project_members")
-        .select("role")
+        .select("id")
         .eq("project_id", id)
         .eq("user_id", user.id)
         .maybeSingle();
 
-      if (memberError) {
-        alert(`Erro ao verificar acesso: ${memberError.message}`);
-        navigate("/obras");
-        return;
-      }
-
-      if (!member) {
+      if (!sharedAccess) {
         alert("Acesso não permitido");
         navigate("/obras");
         return;
       }
-
-      currentAccessRole = member.role as AccessRole;
     }
 
-    setAccessRole(currentAccessRole);
     setProject(projectData);
 
     const { data: logsData, error: logsError } = await supabase
       .from("daily_logs")
-      .select("id, log_date, weather, summary, issues, next_steps")
+      .select(
+        "id, log_date, weather_morning, weather_afternoon, summary, issues, next_steps"
+      )
       .eq("project_id", id)
       .order("log_date", { ascending: false });
 
@@ -144,56 +124,8 @@ export default function ObraDetalhePage() {
       return;
     }
 
-    const loadedLogs = logsData ?? [];
-    setLogs(loadedLogs);
-
-    if (loadedLogs.length > 0) {
-      await loadLogStats(loadedLogs.map((log) => log.id));
-    } else {
-      setLogStatsMap({});
-    }
-
+    setLogs(logsData ?? []);
     setLoading(false);
-  }
-
-  async function loadLogStats(logIds: string[]) {
-    const statsMap: Record<string, LogStats> = {};
-
-    logIds.forEach((logId) => {
-      statsMap[logId] = {
-        crewCount: 0,
-        invoiceCount: 0,
-        photoCount: 0,
-      };
-    });
-
-    const [
-      { data: crewData, error: crewError },
-      { data: invoiceData, error: invoiceError },
-      { data: photoData, error: photoError },
-    ] = await Promise.all([
-      supabase.from("crew_entries").select("daily_log_id").in("daily_log_id", logIds),
-      supabase.from("invoice_files").select("daily_log_id").in("daily_log_id", logIds),
-      supabase.from("photos").select("daily_log_id").in("daily_log_id", logIds),
-    ]);
-
-    if (crewError || invoiceError || photoError) {
-      return;
-    }
-
-    (crewData ?? []).forEach((item: { daily_log_id: string }) => {
-      statsMap[item.daily_log_id].crewCount += 1;
-    });
-
-    (invoiceData ?? []).forEach((item: { daily_log_id: string }) => {
-      statsMap[item.daily_log_id].invoiceCount += 1;
-    });
-
-    (photoData ?? []).forEach((item: { daily_log_id: string }) => {
-      statsMap[item.daily_log_id].photoCount += 1;
-    });
-
-    setLogStatsMap(statsMap);
   }
 
   useEffect(() => {
@@ -229,6 +161,7 @@ export default function ObraDetalhePage() {
   async function getSignedInvoiceUrls(
     invoicesData: {
       id: string;
+      establishment_name: string | null;
       invoice_number: string | null;
       description: string | null;
       original_file_name: string;
@@ -262,7 +195,9 @@ export default function ObraDetalhePage() {
 
     const { data: invoicesData, error: invoicesError } = await supabase
       .from("invoice_files")
-      .select("id, invoice_number, description, original_file_name, storage_path")
+      .select(
+        "id, establishment_name, invoice_number, description, original_file_name, storage_path"
+      )
       .eq("daily_log_id", log.id)
       .order("created_at", { ascending: false });
 
@@ -280,10 +215,14 @@ export default function ObraDetalhePage() {
       throw new Error(`Erro ao carregar fotos: ${photosError.message}`);
     }
 
+    const crew = crewData ?? [];
+    const invoices = await getSignedInvoiceUrls(invoicesData ?? []);
+    const photos = await getSignedPhotoUrls(photosData ?? []);
+
     return {
-      crew: crewData ?? [],
-      invoices: await getSignedInvoiceUrls(invoicesData ?? []),
-      photos: await getSignedPhotoUrls(photosData ?? []),
+      crew,
+      invoices,
+      photos,
     };
   }
 
@@ -311,60 +250,203 @@ export default function ObraDetalhePage() {
     const crewHtml = details.crew
       .map(
         (item) =>
-          `<li><strong>${item.name}</strong> - ${item.role || "-"} - ${
-            item.hours ?? "-"
-          }h</li>`
-      )
-      .join("");
-
-    const invoicesHtml = details.invoices
-      .map(
-        (item) =>
-          `<li><strong>${item.invoice_number || "Sem número"}</strong> - ${
-            item.description || item.original_file_name
-          }</li>`
+          `<tr>
+            <td>${item.name}</td>
+            <td>${item.role || "-"}</td>
+          </tr>`
       )
       .join("");
 
     const photosHtml = details.photos
       .map((item) =>
         item.signed_url
-          ? `<div style="break-inside: avoid; margin-bottom: 12px;">
-               <img src="${item.signed_url}" style="width: 100%; max-width: 320px; border-radius: 10px; border: 1px solid #ddd;" />
+          ? `<div class="photo">
+               <img src="${item.signed_url}" />
+               <p>${item.caption || ""}</p>
              </div>`
           : ""
+      )
+      .join("");
+
+    const invoicesHtml = details.invoices
+      .map(
+        (item) =>
+          `<tr>
+            <td>${item.establishment_name || "-"}</td>
+            <td>${item.invoice_number || "-"}</td>
+            <td>${item.description || "-"}</td>
+          </tr>`
       )
       .join("");
 
     return `
       <html>
         <head>
-          <title>RDO - ${project.name}</title>
+          <title>Registro Diário de Obra</title>
+
           <style>
-            body { font-family: Arial, sans-serif; padding: 32px; color: #111827; }
-            .box { border: 1px solid #ddd; border-radius: 12px; padding: 16px; margin-bottom: 18px; }
-            ul { padding-left: 18px; }
+            body {
+              font-family: Arial, Helvetica, sans-serif;
+              padding: 40px;
+              color: #1f2937;
+            }
+
+            h1 {
+              margin-bottom: 4px;
+            }
+
+            h3 {
+              margin-bottom: 10px;
+            }
+
+            .header {
+              border-bottom: 3px solid #2563eb;
+              padding-bottom: 12px;
+              margin-bottom: 20px;
+            }
+
+            .section {
+              margin-bottom: 22px;
+            }
+
+            .box {
+              border: 1px solid #e5e7eb;
+              border-radius: 10px;
+              padding: 14px;
+              margin-top: 8px;
+            }
+
+            table {
+              width: 100%;
+              border-collapse: collapse;
+            }
+
+            th {
+              text-align: left;
+              background: #f3f4f6;
+              padding: 8px;
+              border: 1px solid #e5e7eb;
+            }
+
+            td {
+              padding: 8px;
+              border: 1px solid #e5e7eb;
+            }
+
+            .grid {
+              display: grid;
+              grid-template-columns: 1fr 1fr;
+              gap: 10px;
+            }
+
+            .photos {
+              display: grid;
+              grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+              gap: 12px;
+            }
+
+            .photo img {
+              width: 100%;
+              border-radius: 8px;
+              border: 1px solid #e5e7eb;
+            }
+
+            .photo p {
+              font-size: 12px;
+              margin-top: 6px;
+            }
+
+            .footer {
+              margin-top: 40px;
+              font-size: 12px;
+              color: #6b7280;
+            }
           </style>
         </head>
-        <body>
-          <h1>Registro Diário de Obra</h1>
 
-          <div class="box">
-            <h2>${project.name}</h2>
-            <p><strong>Cliente:</strong> ${project.client_name || "-"}</p>
-            <p><strong>Endereço:</strong> ${project.address || "-"}</p>
-            <p><strong>Data:</strong> ${new Date(log.log_date).toLocaleDateString(
-              "pt-BR"
-            )}</p>
-            <p><strong>Clima:</strong> ${log.weather || "-"}</p>
+        <body>
+          <div class="header">
+            <h1>Registro Diário de Obra</h1>
+            <strong>${project.name}</strong>
+            <div>Cliente: ${project.client_name || "-"}</div>
+            <div>Endereço: ${project.address || "-"}</div>
           </div>
 
-          <div class="box"><h3>Resumo do dia</h3><p>${log.summary || "-"}</p></div>
-          <div class="box"><h3>Ocorrências</h3><p>${log.issues || "-"}</p></div>
-          <div class="box"><h3>Funcionários</h3><ul>${crewHtml || "<li>Nenhum</li>"}</ul></div>
-          <div class="box"><h3>NF's</h3><ul>${invoicesHtml || "<li>Nenhuma</li>"}</ul></div>
-          <div class="box"><h3>Serviços</h3><p>${log.next_steps || "-"}</p></div>
-          <div class="box"><h3>Fotos</h3>${photosHtml || "<p>Nenhuma foto adicionada.</p>"}</div>
+          <div class="section">
+            <h3>Informações do Registro</h3>
+
+            <div class="box grid">
+              <div><strong>Data:</strong> ${new Date(log.log_date).toLocaleDateString(
+                "pt-BR"
+              )}</div>
+              <div><strong>Clima manhã:</strong> ${log.weather_morning || "-"}</div>
+              <div><strong>Clima tarde:</strong> ${log.weather_afternoon || "-"}</div>
+            </div>
+          </div>
+
+          <div class="section">
+            <h3>Resumo do dia</h3>
+            <div class="box">${log.summary || "-"}</div>
+          </div>
+
+          <div class="section">
+            <h3>Ocorrências</h3>
+            <div class="box">${log.issues || "-"}</div>
+          </div>
+
+          <div class="section">
+            <h3>Funcionários</h3>
+
+            <table>
+              <thead>
+                <tr>
+                  <th>Nome</th>
+                  <th>Função</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                ${crewHtml || `<tr><td colspan="2">Nenhum</td></tr>`}
+              </tbody>
+            </table>
+          </div>
+
+          <div class="section">
+            <h3>Serviços</h3>
+            <div class="box">${log.next_steps || "-"}</div>
+          </div>
+
+          <div class="section">
+            <h3>Fotos da obra</h3>
+
+            <div class="photos">
+              ${photosHtml || "<p>Nenhuma foto registrada.</p>"}
+            </div>
+          </div>
+
+          <div class="section">
+            <h3>Notas fiscais</h3>
+
+            <table>
+              <thead>
+                <tr>
+                  <th>Estabelecimento</th>
+                  <th>Número NF</th>
+                  <th>Descrição</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                ${invoicesHtml || `<tr><td colspan="3">Nenhuma</td></tr>`}
+              </tbody>
+            </table>
+          </div>
+
+          <div class="footer">
+            Documento gerado automaticamente pelo sistema RDO • ${new Date().toLocaleString(
+              "pt-BR"
+            )}
+          </div>
         </body>
       </html>
     `;
@@ -396,8 +478,6 @@ export default function ObraDetalhePage() {
     }
   }
 
-  const canEdit = accessRole === "owner" || accessRole === "editor" || accessRole === "admin";
-
   if (loading) {
     return (
       <div className="rdo-page">
@@ -408,7 +488,9 @@ export default function ObraDetalhePage() {
     );
   }
 
-  if (!project) return null;
+  if (!project) {
+    return null;
+  }
 
   return (
     <div className="rdo-page">
@@ -416,6 +498,7 @@ export default function ObraDetalhePage() {
         <div className="rdo-header">
           <div>
             <h1 className="rdo-title">{project.name}</h1>
+
             <p className="rdo-subtitle">
               {project.client_name && <>Cliente: {project.client_name} • </>}
               {project.address}
@@ -437,112 +520,28 @@ export default function ObraDetalhePage() {
             <p className="rdo-empty-state">Nenhum registro diário cadastrado.</p>
           )}
 
-          {logs.map((log) => {
-            const stats = logStatsMap[log.id] ?? {
-              crewCount: 0,
-              invoiceCount: 0,
-              photoCount: 0,
-            };
+          {logs.map((log) => (
+            <div key={log.id} className="rdo-log-item">
+              <div className="rdo-log-date">
+                {new Date(log.log_date).toLocaleDateString("pt-BR")}
+              </div>
 
-            return (
-              <div
-                key={log.id}
-                className="rdo-log-item"
-                style={{
-                  border: "1px solid #e5e7eb",
-                  borderRadius: 16,
-                  padding: 16,
-                  marginBottom: 16,
-                  background: "#fff",
-                }}
-              >
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    gap: 16,
-                    flexWrap: "wrap",
-                  }}
-                >
-                  <div>
-                    <div className="rdo-log-date">
-                      {new Date(log.log_date).toLocaleDateString("pt-BR")}
-                    </div>
-
-                    {log.weather && (
-                      <div className="rdo-log-weather" style={{ marginTop: 6 }}>
-                        Clima: {log.weather}
-                      </div>
-                    )}
-                  </div>
-
-                  <div
-                    style={{
-                      display: "flex",
-                      gap: 8,
-                      flexWrap: "wrap",
-                      alignItems: "flex-start",
-                    }}
-                  >
-                    <span
-                      style={{
-                        border: "1px solid #dbeafe",
-                        background: "#eff6ff",
-                        color: "#1d4ed8",
-                        borderRadius: 999,
-                        padding: "6px 10px",
-                        fontSize: 13,
-                        fontWeight: 600,
-                      }}
-                    >
-                      {stats.crewCount} funcionário(s)
-                    </span>
-
-                    <span
-                      style={{
-                        border: "1px solid #dcfce7",
-                        background: "#f0fdf4",
-                        color: "#15803d",
-                        borderRadius: 999,
-                        padding: "6px 10px",
-                        fontSize: 13,
-                        fontWeight: 600,
-                      }}
-                    >
-                      {stats.invoiceCount} NF(s)
-                    </span>
-
-                    <span
-                      style={{
-                        border: "1px solid #f3e8ff",
-                        background: "#faf5ff",
-                        color: "#7e22ce",
-                        borderRadius: 999,
-                        padding: "6px 10px",
-                        fontSize: 13,
-                        fontWeight: 600,
-                      }}
-                    >
-                      {stats.photoCount} foto(s)
-                    </span>
-                  </div>
+              <div className="rdo-log-content">
+                <div className="rdo-log-weather">
+                  Manhã: {log.weather_morning || "-"} | Tarde:{" "}
+                  {log.weather_afternoon || "-"}
                 </div>
 
                 {log.summary && (
-                  <div
-                    className="rdo-log-summary"
-                    style={{ marginTop: 12, lineHeight: 1.6 }}
-                  >
-                    {log.summary}
-                  </div>
+                  <div className="rdo-log-summary">{log.summary}</div>
                 )}
 
                 <div
                   style={{
                     display: "flex",
-                    gap: 12,
-                    marginTop: 14,
+                    gap: 10,
                     flexWrap: "wrap",
+                    marginTop: 14,
                   }}
                 >
                   <button
@@ -564,30 +563,20 @@ export default function ObraDetalhePage() {
                   </button>
                 </div>
               </div>
-            );
-          })}
+            </div>
+          ))}
         </div>
 
         <div className="rdo-top-gap">
-          {canEdit ? (
-            <RegistroWizard
-              project={{
-                id: project.id,
-                nome: project.name,
-                cliente: project.client_name ?? "",
-                endereco: project.address ?? "",
-              }}
-              onSaved={loadData}
-            />
-          ) : (
-            <div className="rdo-card rdo-section">
-              <h2 className="rdo-form-title">Modo visualização</h2>
-              <p className="rdo-form-subtitle">
-                Você tem acesso apenas para visualizar esta obra, consultar registros,
-                NF's, fotos e gerar PDF.
-              </p>
-            </div>
-          )}
+          <RegistroWizard
+            project={{
+              id: project.id,
+              nome: project.name,
+              cliente: project.client_name ?? "",
+              endereco: project.address ?? "",
+            }}
+            onSaved={loadData}
+          />
         </div>
       </div>
 
@@ -596,7 +585,7 @@ export default function ObraDetalhePage() {
           style={{
             position: "fixed",
             inset: 0,
-            background: "rgba(0, 0, 0, 0.5)",
+            background: "rgba(0, 0, 0, 0.45)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
@@ -609,11 +598,10 @@ export default function ObraDetalhePage() {
             className="rdo-card"
             style={{
               width: "100%",
-              maxWidth: 920,
+              maxWidth: 900,
               maxHeight: "90vh",
               overflowY: "auto",
               padding: 24,
-              borderRadius: 20,
             }}
             onClick={(e) => e.stopPropagation()}
           >
@@ -629,7 +617,8 @@ export default function ObraDetalhePage() {
             >
               <div>
                 <h2 style={{ margin: 0 }}>
-                  Registro de {new Date(selectedLog.log_date).toLocaleDateString("pt-BR")}
+                  Registro de{" "}
+                  {new Date(selectedLog.log_date).toLocaleDateString("pt-BR")}
                 </h2>
                 <p style={{ margin: "8px 0 0", color: "#6b7280" }}>
                   Visualização completa do registro finalizado.
@@ -645,39 +634,22 @@ export default function ObraDetalhePage() {
               </button>
             </div>
 
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-                gap: 12,
-                marginBottom: 20,
-              }}
-            >
-              <div style={{ border: "1px solid #e5e7eb", borderRadius: 14, padding: 14, background: "#f9fafb" }}>
-                <strong>Clima</strong>
-                <div style={{ marginTop: 6 }}>{selectedLog.weather || "-"}</div>
-              </div>
-
-              <div style={{ border: "1px solid #e5e7eb", borderRadius: 14, padding: 14, background: "#f9fafb" }}>
-                <strong>Funcionários</strong>
-                <div style={{ marginTop: 6 }}>{selectedLogDetails.crew.length}</div>
-              </div>
-
-              <div style={{ border: "1px solid #e5e7eb", borderRadius: 14, padding: 14, background: "#f9fafb" }}>
-                <strong>NF's</strong>
-                <div style={{ marginTop: 6 }}>{selectedLogDetails.invoices.length}</div>
-              </div>
-
-              <div style={{ border: "1px solid #e5e7eb", borderRadius: 14, padding: 14, background: "#f9fafb" }}>
-                <strong>Fotos</strong>
-                <div style={{ marginTop: 6 }}>{selectedLogDetails.photos.length}</div>
-              </div>
-            </div>
-
-            <div style={{ border: "1px solid #e5e7eb", borderRadius: 16, padding: 18, background: "#fff" }}>
-              <p><strong>Resumo:</strong> {selectedLog.summary || "-"}</p>
-              <p><strong>Ocorrências:</strong> {selectedLog.issues || "-"}</p>
-              <p><strong>Serviços:</strong> {selectedLog.next_steps || "-"}</p>
+            <div className="rdo-section" style={{ padding: 0 }}>
+              <p>
+                <strong>Clima manhã:</strong> {selectedLog.weather_morning || "-"}
+              </p>
+              <p>
+                <strong>Clima tarde:</strong> {selectedLog.weather_afternoon || "-"}
+              </p>
+              <p>
+                <strong>Resumo:</strong> {selectedLog.summary || "-"}
+              </p>
+              <p>
+                <strong>Ocorrências:</strong> {selectedLog.issues || "-"}
+              </p>
+              <p>
+                <strong>Serviços:</strong> {selectedLog.next_steps || "-"}
+              </p>
             </div>
 
             <div className="rdo-top-gap">
@@ -685,42 +657,13 @@ export default function ObraDetalhePage() {
               {selectedLogDetails.crew.length === 0 ? (
                 <p>Nenhum funcionário informado.</p>
               ) : (
-                <div style={{ display: "grid", gap: 10 }}>
+                <ul>
                   {selectedLogDetails.crew.map((item) => (
-                    <div key={item.id} style={{ border: "1px solid #e5e7eb", borderRadius: 14, padding: 12 }}>
-                      <strong>{item.name}</strong>
-                      <div style={{ marginTop: 6, color: "#4b5563" }}>
-                        Função: {item.role || "-"} • Horas: {item.hours ?? "-"}h
-                      </div>
-                    </div>
+                    <li key={item.id}>
+                      <strong>{item.name}</strong> - {item.role || "-"}
+                    </li>
                   ))}
-                </div>
-              )}
-            </div>
-
-            <div className="rdo-top-gap">
-              <h3>NF's</h3>
-              {selectedLogDetails.invoices.length === 0 ? (
-                <p>Nenhuma NF cadastrada.</p>
-              ) : (
-                <div style={{ display: "grid", gap: 10 }}>
-                  {selectedLogDetails.invoices.map((item) => (
-                    <div key={item.id} style={{ border: "1px solid #e5e7eb", borderRadius: 14, padding: 12 }}>
-                      <strong>{item.invoice_number || "Sem número"}</strong>
-                      <div style={{ marginTop: 6, color: "#4b5563" }}>
-                        {item.description || item.original_file_name}
-                      </div>
-
-                      {item.signed_url && (
-                        <div style={{ marginTop: 10 }}>
-                          <a href={item.signed_url} target="_blank" rel="noreferrer">
-                            Abrir arquivo
-                          </a>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
+                </ul>
               )}
             </div>
 
@@ -741,7 +684,7 @@ export default function ObraDetalhePage() {
                       key={photo.id}
                       style={{
                         border: "1px solid #e5e7eb",
-                        borderRadius: 14,
+                        borderRadius: 12,
                         overflow: "hidden",
                         background: "#fff",
                       }}
@@ -762,12 +705,65 @@ export default function ObraDetalhePage() {
                       )}
 
                       <div style={{ padding: 12 }}>
+                        <p style={{ marginTop: 0, marginBottom: 10 }}>
+                          <strong>Legenda:</strong> {photo.caption || "-"}
+                        </p>
+
                         {photo.signed_url && (
-                          <a href={photo.signed_url} target="_blank" rel="noreferrer">
+                          <a
+                            href={photo.signed_url}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
                             Abrir foto
                           </a>
                         )}
                       </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="rdo-top-gap">
+              <h3>NF's</h3>
+              {selectedLogDetails.invoices.length === 0 ? (
+                <p>Nenhuma NF cadastrada.</p>
+              ) : (
+                <div style={{ display: "grid", gap: 12 }}>
+                  {selectedLogDetails.invoices.map((item) => (
+                    <div
+                      key={item.id}
+                      style={{
+                        border: "1px solid #e5e7eb",
+                        borderRadius: 12,
+                        padding: 14,
+                        background: "#fff",
+                      }}
+                    >
+                      <p style={{ margin: "0 0 8px" }}>
+                        <strong>Nome do estabelecimento:</strong>{" "}
+                        {item.establishment_name || "-"}
+                      </p>
+                      <p style={{ margin: "0 0 8px" }}>
+                        <strong>Número da NF:</strong> {item.invoice_number || "-"}
+                      </p>
+                      <p style={{ margin: "0 0 8px" }}>
+                        <strong>Descrição:</strong> {item.description || "-"}
+                      </p>
+                      <p style={{ margin: "0 0 10px" }}>
+                        <strong>Arquivo:</strong> {item.original_file_name}
+                      </p>
+
+                      {item.signed_url && (
+                        <a
+                          href={item.signed_url}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          Abrir arquivo
+                        </a>
+                      )}
                     </div>
                   ))}
                 </div>

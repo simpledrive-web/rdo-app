@@ -839,3 +839,15 @@
     border-radius: 18px;
   }
 }
+
+.rdo-form-grid-3 {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 16px;
+}
+
+@media (max-width: 992px) {
+  .rdo-form-grid-3 {
+    grid-template-columns: 1fr;
+  }
+}
