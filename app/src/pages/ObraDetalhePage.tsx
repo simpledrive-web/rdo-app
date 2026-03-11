@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import QRCode from "qrcode";
 import RegistroWizard from "../components/RegistroWizard";
 import { supabase } from "../supabase/client";
 
@@ -19,6 +20,9 @@ type DailyLog = {
   summary: string | null;
   issues: string | null;
   next_steps: string | null;
+  register_number: number | null;
+  responsible_name: string | null;
+  signature_data: string | null;
 };
 
 type CrewEntry = {
@@ -113,7 +117,7 @@ export default function ObraDetalhePage() {
     const { data: logsData, error: logsError } = await supabase
       .from("daily_logs")
       .select(
-        "id, log_date, weather_morning, weather_afternoon, summary, issues, next_steps"
+        "id, log_date, weather_morning, weather_afternoon, summary, issues, next_steps, register_number, responsible_name, signature_data"
       )
       .eq("project_id", id)
       .order("log_date", { ascending: false });
@@ -244,8 +248,19 @@ export default function ObraDetalhePage() {
     setSelectedLogDetails(null);
   }
 
-  function buildLogPdfHtml(log: DailyLog, details: LogDetails) {
+  async function buildLogPdfHtml(log: DailyLog, details: LogDetails) {
     if (!project) return "";
+
+    const qrText = `RDO ${log.register_number ?? "-"} | Obra: ${project.name} | Data: ${new Date(
+      log.log_date
+    ).toLocaleDateString("pt-BR")} | Responsável: ${
+      log.responsible_name || "-"
+    }`;
+
+    const qrCodeDataUrl = await QRCode.toDataURL(qrText, {
+      width: 160,
+      margin: 1,
+    });
 
     const crewHtml = details.crew
       .map(
@@ -303,6 +318,19 @@ export default function ObraDetalhePage() {
               border-bottom: 3px solid #2563eb;
               padding-bottom: 12px;
               margin-bottom: 20px;
+              display: flex;
+              justify-content: space-between;
+              gap: 20px;
+              align-items: flex-start;
+            }
+
+            .header-right {
+              text-align: right;
+            }
+
+            .header-right img {
+              width: 120px;
+              height: 120px;
             }
 
             .section {
@@ -356,6 +384,13 @@ export default function ObraDetalhePage() {
               margin-top: 6px;
             }
 
+            .signature {
+              margin-top: 10px;
+              max-width: 260px;
+              border: 1px solid #e5e7eb;
+              border-radius: 8px;
+            }
+
             .footer {
               margin-top: 40px;
               font-size: 12px;
@@ -366,10 +401,18 @@ export default function ObraDetalhePage() {
 
         <body>
           <div class="header">
-            <h1>Registro Diário de Obra</h1>
-            <strong>${project.name}</strong>
-            <div>Cliente: ${project.client_name || "-"}</div>
-            <div>Endereço: ${project.address || "-"}</div>
+            <div>
+              <h1>Registro Diário de Obra</h1>
+              <strong>${project.name}</strong>
+              <div>Cliente: ${project.client_name || "-"}</div>
+              <div>Endereço: ${project.address || "-"}</div>
+              <div><strong>RDO nº:</strong> ${log.register_number ?? "-"}</div>
+            </div>
+
+            <div class="header-right">
+              <img src="${qrCodeDataUrl}" />
+              <div>Validação do registro</div>
+            </div>
           </div>
 
           <div class="section">
@@ -381,7 +424,17 @@ export default function ObraDetalhePage() {
               )}</div>
               <div><strong>Clima manhã:</strong> ${log.weather_morning || "-"}</div>
               <div><strong>Clima tarde:</strong> ${log.weather_afternoon || "-"}</div>
+              <div><strong>Responsável:</strong> ${log.responsible_name || "-"}</div>
             </div>
+
+            ${
+              log.signature_data
+                ? `<div class="box">
+                    <strong>Assinatura</strong><br />
+                    <img class="signature" src="${log.signature_data}" />
+                  </div>`
+                : ""
+            }
           </div>
 
           <div class="section">
@@ -456,7 +509,7 @@ export default function ObraDetalhePage() {
     try {
       setPdfLoadingId(log.id);
       const details = await loadLogDetails(log);
-      const html = buildLogPdfHtml(log, details);
+      const html = await buildLogPdfHtml(log, details);
 
       const printWindow = window.open("", "_blank");
       if (!printWindow) {
@@ -523,6 +576,7 @@ export default function ObraDetalhePage() {
           {logs.map((log) => (
             <div key={log.id} className="rdo-log-item">
               <div className="rdo-log-date">
+                RDO #{log.register_number ?? "-"} •{" "}
                 {new Date(log.log_date).toLocaleDateString("pt-BR")}
               </div>
 
@@ -617,7 +671,7 @@ export default function ObraDetalhePage() {
             >
               <div>
                 <h2 style={{ margin: 0 }}>
-                  Registro de{" "}
+                  RDO #{selectedLog.register_number ?? "-"} •{" "}
                   {new Date(selectedLog.log_date).toLocaleDateString("pt-BR")}
                 </h2>
                 <p style={{ margin: "8px 0 0", color: "#6b7280" }}>
@@ -642,6 +696,9 @@ export default function ObraDetalhePage() {
                 <strong>Clima tarde:</strong> {selectedLog.weather_afternoon || "-"}
               </p>
               <p>
+                <strong>Responsável:</strong> {selectedLog.responsible_name || "-"}
+              </p>
+              <p>
                 <strong>Resumo:</strong> {selectedLog.summary || "-"}
               </p>
               <p>
@@ -651,6 +708,22 @@ export default function ObraDetalhePage() {
                 <strong>Serviços:</strong> {selectedLog.next_steps || "-"}
               </p>
             </div>
+
+            {selectedLog.signature_data && (
+              <div className="rdo-top-gap">
+                <h3>Assinatura</h3>
+                <img
+                  src={selectedLog.signature_data}
+                  alt="Assinatura"
+                  style={{
+                    maxWidth: 260,
+                    border: "1px solid #e5e7eb",
+                    borderRadius: 12,
+                    background: "#fff",
+                  }}
+                />
+              </div>
+            )}
 
             <div className="rdo-top-gap">
               <h3>Funcionários</h3>

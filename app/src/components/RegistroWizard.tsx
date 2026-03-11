@@ -1,6 +1,7 @@
 import { useMemo, useState, type ChangeEvent } from "react";
 import { supabase } from "../supabase/client";
 import StepIndicator from "./StepIndicator";
+import SignaturePad from "./SignaturePad";
 
 type Funcionario = {
   nome: string;
@@ -49,7 +50,8 @@ const OPCOES_CLIMA = ["Sol", "Nublado", "Chuvoso"];
 function extractInvoiceNumberFromFileName(fileName: string) {
   const cleaned = fileName.replace(/\.[^/.]+$/, "");
   const patterns = [
-    /(?:nf|nfe|nota)[^\d]{0,5}(\d{3,})/i,
+    /(?:nf|nfe|nota)[^\d]{0,8}(\d{3,})/i,
+    /(\d{6,})/,
     /\b(\d{4,})\b/,
   ];
 
@@ -75,6 +77,8 @@ export default function RegistroWizard({
   const [climaTarde, setClimaTarde] = useState("");
   const [resumo, setResumo] = useState("");
   const [ocorrencias, setOcorrencias] = useState("");
+  const [responsavelNome, setResponsavelNome] = useState("");
+  const [assinatura, setAssinatura] = useState("");
 
   const [funcionarios, setFuncionarios] = useState<Funcionario[]>([
     { nome: "", funcao: "" },
@@ -142,6 +146,14 @@ export default function RegistroWizard({
     setFotos((prev) => [...prev, ...novosItens]);
   }
 
+  function handleCameraPhotoChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setFotos((prev) => [...prev, { arquivo: file, legenda: "" }]);
+    event.target.value = "";
+  }
+
   function updatePhotoCaption(index: number, legenda: string) {
     setFotos((prev) =>
       prev.map((item, i) => (i === index ? { ...item, legenda } : item))
@@ -152,7 +164,11 @@ export default function RegistroWizard({
     setFotos((prev) => prev.filter((_, i) => i !== index));
   }
 
-  function updateNF(index: number, field: keyof NFItem, value: string | File | null) {
+  function updateNF(
+    index: number,
+    field: keyof NFItem,
+    value: string | File | null
+  ) {
     const updated = [...nfs];
 
     if (field === "arquivo") {
@@ -194,10 +210,28 @@ export default function RegistroWizard({
     setClimaTarde("");
     setResumo("");
     setOcorrencias("");
+    setResponsavelNome("");
+    setAssinatura("");
     setFuncionarios([{ nome: "", funcao: "" }]);
     setServicos([{ descricao: "", status: "" }]);
     setFotos([]);
     setNfs([{ estabelecimento: "", numero: "", descricao: "", arquivo: null }]);
+  }
+
+  async function getNextRegisterNumber() {
+    const { data, error } = await supabase
+      .from("daily_logs")
+      .select("register_number")
+      .eq("project_id", project.id)
+      .order("register_number", { ascending: false })
+      .limit(1);
+
+    if (error) {
+      throw new Error(`Erro ao gerar numeração do registro: ${error.message}`);
+    }
+
+    const lastNumber = data?.[0]?.register_number ?? 0;
+    return lastNumber + 1;
   }
 
   async function persistRegistro() {
@@ -218,7 +252,7 @@ export default function RegistroWizard({
     const { data: existingDailyLog, error: existingDailyLogError } =
       await supabase
         .from("daily_logs")
-        .select("id")
+        .select("id, register_number")
         .eq("project_id", project.id)
         .eq("log_date", data)
         .maybeSingle();
@@ -231,6 +265,11 @@ export default function RegistroWizard({
     }
 
     let dailyLogId = existingDailyLog?.id;
+    let registerNumber = existingDailyLog?.register_number ?? null;
+
+    if (!registerNumber) {
+      registerNumber = await getNextRegisterNumber();
+    }
 
     if (!dailyLogId) {
       const { data: newDailyLog, error: dailyLogError } = await supabase
@@ -244,6 +283,9 @@ export default function RegistroWizard({
           summary: resumo.trim() || null,
           issues: ocorrencias.trim() || null,
           next_steps: null,
+          register_number: registerNumber,
+          responsible_name: responsavelNome.trim() || null,
+          signature_data: assinatura || null,
           created_by: authData.user.id,
         })
         .select("id")
@@ -263,6 +305,9 @@ export default function RegistroWizard({
           weather_afternoon: climaTarde || null,
           summary: resumo.trim() || null,
           issues: ocorrencias.trim() || null,
+          register_number: registerNumber,
+          responsible_name: responsavelNome.trim() || null,
+          signature_data: assinatura || null,
         })
         .eq("id", dailyLogId);
 
@@ -451,6 +496,12 @@ export default function RegistroWizard({
             ul {
               padding-left: 18px;
             }
+            .signature {
+              margin-top: 12px;
+              max-width: 280px;
+              border: 1px solid #ddd;
+              border-radius: 8px;
+            }
           </style>
         </head>
         <body>
@@ -463,6 +514,12 @@ export default function RegistroWizard({
             <p><strong>Data:</strong> ${data || "-"}</p>
             <p><strong>Clima manhã:</strong> ${climaManha || "-"}</p>
             <p><strong>Clima tarde:</strong> ${climaTarde || "-"}</p>
+            <p><strong>Responsável:</strong> ${responsavelNome || "-"}</p>
+            ${
+              assinatura
+                ? `<div><strong>Assinatura:</strong><br /><img class="signature" src="${assinatura}" /></div>`
+                : ""
+            }
           </div>
 
           <div class="box">
@@ -586,6 +643,21 @@ export default function RegistroWizard({
                 ))}
               </select>
             </div>
+          </div>
+
+          <div className="rdo-field">
+            <label className="rdo-label">Responsável pelo registro</label>
+            <input
+              className="rdo-input"
+              value={responsavelNome}
+              onChange={(e) => setResponsavelNome(e.target.value)}
+              placeholder="Digite o nome do responsável"
+            />
+          </div>
+
+          <div className="rdo-field">
+            <label className="rdo-label">Assinatura</label>
+            <SignaturePad value={assinatura} onChange={setAssinatura} />
           </div>
 
           <div className="rdo-field">
@@ -730,15 +802,28 @@ export default function RegistroWizard({
       {step === 4 && (
         <>
           <div className="rdo-photo-upload-box">
-            <div className="rdo-field">
-              <label className="rdo-label">Adicionar fotos</label>
-              <input
-                className="rdo-input"
-                type="file"
-                accept="image/*"
-                multiple
-                onChange={handlePhotosChange}
-              />
+            <div className="rdo-form-grid-2">
+              <div className="rdo-field">
+                <label className="rdo-label">Adicionar da galeria</label>
+                <input
+                  className="rdo-input"
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  onChange={handlePhotosChange}
+                />
+              </div>
+
+              <div className="rdo-field">
+                <label className="rdo-label">Tirar foto</label>
+                <input
+                  className="rdo-input"
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  onChange={handleCameraPhotoChange}
+                />
+              </div>
             </div>
 
             <p className="rdo-form-subtitle" style={{ marginBottom: 0 }}>
