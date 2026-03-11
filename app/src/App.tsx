@@ -4,6 +4,7 @@ import Dashboard from "./pages/Dashboard";
 import Login from "./pages/Login";
 import ObraDetalhePage from "./pages/ObraDetalhePage";
 import ObrasPage from "./pages/ObrasPage";
+import PublicRegistroPage from "./pages/PublicRegistroPage";
 import Register from "./pages/Register";
 import ResetPassword from "./pages/ResetPassword";
 import UsersPage from "./pages/UsersPage";
@@ -16,6 +17,7 @@ export default function App() {
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
       <Route path="/reset-password" element={<ResetPassword />} />
+      <Route path="/rdo/:logId" element={<PublicRegistroPage />} />
 
       <Route
         path="/dashboard"
