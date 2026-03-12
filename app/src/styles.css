@@ -851,3 +851,24 @@
     grid-template-columns: 1fr;
   }
 }
+
+.rdo-tabs{
+display:flex;
+gap:10px;
+margin-top:20px;
+}
+
+.rdo-tab{
+padding:10px 18px;
+border-radius:10px;
+border:1px solid #ddd;
+background:#fff;
+cursor:pointer;
+font-weight:600;
+}
+
+.rdo-tab.active{
+background:#2563eb;
+color:white;
+border-color:#2563eb;
+}
