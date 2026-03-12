@@ -2,41 +2,34 @@ type Props = {
   step: number;
 };
 
+const steps = [
+  "Registro",
+  "Funcionários",
+  "Serviços",
+  "Fotos",
+  "NF's",
+];
+
 export default function StepIndicator({ step }: Props) {
-
-  const steps = [
-    "Registro",
-    "Funcionários",
-    "Serviços",
-    "Fotos",
-    "NF's"
-  ];
-
   return (
-    <div className="step-indicator">
-
+    <div className="rdo-steps">
       {steps.map((label, index) => {
-
         const number = index + 1;
         const active = number === step;
+        const completed = number < step;
 
         return (
           <div
             key={number}
-            className={`step ${active ? "active" : ""}`}
+            className={`rdo-step ${active ? "is-active" : ""} ${
+              completed ? "is-completed" : ""
+            }`}
           >
-
-            <div className="step-circle">
-              {number}
-            </div>
-
-            <span>{label}</span>
-
+            <div className="rdo-step-circle">{number}</div>
+            <div className="rdo-step-label">{label}</div>
           </div>
         );
-
       })}
-
     </div>
   );
 }
