@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import QRCode from "qrcode";
 import RegistroWizard from "../components/RegistroWizard";
@@ -35,6 +35,7 @@ type DailyLog = {
 };
 
 export default function ObraDetalhePage() {
+
   const { id } = useParams();
   const navigate = useNavigate();
 
@@ -44,19 +45,17 @@ export default function ObraDetalhePage() {
 
   const [activeTab, setActiveTab] = useState<"registro" | "historico">("registro");
 
+  const [editingLog, setEditingLog] = useState<DailyLog | null>(null);
+
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+
+  const menuRef = useRef<HTMLDivElement | null>(null);
+
   async function loadData() {
+
     if (!id) return;
 
     setLoading(true);
-
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      navigate("/login");
-      return;
-    }
 
     const { data: projectData } = await supabase
       .from("projects")
@@ -75,34 +74,60 @@ export default function ObraDetalhePage() {
     setLogs(logsData ?? []);
 
     setLoading(false);
+
   }
 
   useEffect(() => {
     loadData();
   }, [id]);
 
+  useEffect(() => {
+
+    function handleClickOutside(event: MouseEvent) {
+
+      if (!menuRef.current?.contains(event.target as Node)) {
+        setOpenMenuId(null);
+      }
+
+    }
+
+    document.addEventListener("mousedown", handleClickOutside);
+
+    return () =>
+      document.removeEventListener("mousedown", handleClickOutside);
+
+  }, []);
+
   function handleBack() {
     navigate("/obras");
   }
 
   async function handleShareLog(log: DailyLog) {
+
     const url = `https://rdo-app-sigma.vercel.app/rdo/${log.id}`;
 
     try {
+
       await navigator.clipboard.writeText(url);
-      alert("Link do registro copiado!");
+
+      alert("Link copiado!");
+
     } catch {
+
       prompt("Copie o link:", url);
+
     }
+
   }
 
   async function buildPdf(log: DailyLog) {
+
     const qr = await QRCode.toDataURL(
       `https://rdo-app-sigma.vercel.app/rdo/${log.id}`
     );
 
     return `
-    <html>
+      <html>
       <body style="font-family:Arial;padding:40px">
 
       <h2>Registro Diário de Obra</h2>
@@ -133,11 +158,13 @@ export default function ObraDetalhePage() {
       <img src="${qr}" width="120"/>
 
       </body>
-    </html>
+      </html>
     `;
+
   }
 
   async function handleGeneratePdf(log: DailyLog) {
+
     const html = await buildPdf(log);
 
     const win = window.open("", "_blank");
@@ -147,9 +174,33 @@ export default function ObraDetalhePage() {
     win.document.write(html);
     win.document.close();
     win.print();
+
+  }
+
+  async function handleDelete(log: DailyLog) {
+
+    const confirmDelete = window.confirm("Excluir este registro?");
+
+    if (!confirmDelete) return;
+
+    await supabase
+      .from("daily_logs")
+      .delete()
+      .eq("id", log.id);
+
+    loadData();
+
+  }
+
+  function handleEdit(log: DailyLog) {
+
+    setEditingLog(log);
+    setActiveTab("registro");
+
   }
 
   if (loading) {
+
     return (
       <div className="rdo-page">
         <div className="rdo-container">
@@ -157,18 +208,22 @@ export default function ObraDetalhePage() {
         </div>
       </div>
     );
+
   }
 
   if (!project) return null;
 
   return (
+
     <div className="rdo-page">
+
       <div className="rdo-container">
 
         <div className="rdo-header">
 
           <div>
             <h1>{project.name}</h1>
+
             <p>
               {project.client_name && <>Cliente: {project.client_name} • </>}
               {project.address}
@@ -184,12 +239,14 @@ export default function ObraDetalhePage() {
         <div className="rdo-tabs">
 
           <button
+            className={activeTab === "registro" ? "active" : ""}
             onClick={() => setActiveTab("registro")}
           >
             Novo Registro
           </button>
 
           <button
+            className={activeTab === "historico" ? "active" : ""}
             onClick={() => setActiveTab("historico")}
           >
             Histórico ({logs.length})
@@ -198,6 +255,7 @@ export default function ObraDetalhePage() {
         </div>
 
         {activeTab === "registro" && (
+
           <RegistroWizard
             project={{
               id: project.id,
@@ -205,17 +263,18 @@ export default function ObraDetalhePage() {
               cliente: project.client_name ?? "",
               endereco: project.address ?? ""
             }}
-            onSaved={loadData}
+            editingLog={editingLog}
+            onSaved={() => {
+              setEditingLog(null);
+              loadData();
+            }}
           />
+
         )}
 
         {activeTab === "historico" && (
 
           <div style={{marginTop:20}}>
-
-            {logs.length === 0 && (
-              <p>Nenhum registro ainda.</p>
-            )}
 
             {logs.map((log) => (
 
@@ -225,32 +284,71 @@ export default function ObraDetalhePage() {
                   border:"1px solid #ddd",
                   borderRadius:10,
                   padding:16,
-                  marginBottom:12
+                  marginBottom:12,
+                  display:"flex",
+                  justifyContent:"space-between",
+                  alignItems:"center"
                 }}
               >
 
-                <strong>
-                  {formatRdoNumber(log.register_number)}
-                </strong>
+                <div>
 
-                {" • "}
+                  <strong>
+                    {formatRdoNumber(log.register_number)}
+                  </strong>
 
-                {formatDateBR(log.log_date)}
+                  {" • "}
 
-                <div style={{marginTop:10}}>
+                  {formatDateBR(log.log_date)}
 
-                  <button
-                    onClick={() => handleGeneratePdf(log)}
-                    style={{marginRight:10}}
-                  >
-                    Gerar PDF
-                  </button>
+                </div>
+
+                <div ref={menuRef} style={{position:"relative"}}>
 
                   <button
-                    onClick={() => handleShareLog(log)}
+                    onClick={() =>
+                      setOpenMenuId(openMenuId === log.id ? null : log.id)
+                    }
                   >
-                    Compartilhar
+                    ⋮
                   </button>
+
+                  {openMenuId === log.id && (
+
+                    <div
+                      style={{
+                        position:"absolute",
+                        right:0,
+                        top:30,
+                        background:"#fff",
+                        border:"1px solid #ddd",
+                        borderRadius:8,
+                        padding:10,
+                        display:"flex",
+                        flexDirection:"column",
+                        gap:8
+                      }}
+                    >
+
+                      <button onClick={() => handleEdit(log)}>
+                        Editar
+                      </button>
+
+                      <button onClick={() => handleGeneratePdf(log)}>
+                        Gerar PDF
+                      </button>
+
+                      <button onClick={() => handleShareLog(log)}>
+                        Compartilhar
+                      </button>
+
+                      <button onClick={() => handleDelete(log)}>
+                        Excluir
+                      </button>
+
+                    </div>
+
+                  )}
 
                 </div>
 
@@ -263,6 +361,9 @@ export default function ObraDetalhePage() {
         )}
 
       </div>
+
     </div>
+
   );
+
 }
