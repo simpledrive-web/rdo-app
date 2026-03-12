@@ -1,29 +1,25 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import QRCode from "qrcode";
 import RegistroWizard from "../components/RegistroWizard";
 import { supabase } from "../supabase/client";
 
-/* ===============================
-   Função segura para data BR
-================================ */
 function formatDateBR(dateString: string | null) {
   if (!dateString) return "-";
-
   const [year, month, day] = dateString.split("-");
   return `${day}/${month}/${year}`;
 }
 
-/* ===============================
-   Tipagens
-================================ */
+function formatRdoNumber(value: number | null | undefined) {
+  if (!value) return "RDO-000";
+  return `RDO-${String(value).padStart(3, "0")}`;
+}
 
 type Project = {
   id: string;
   name: string;
   client_name: string | null;
   address: string | null;
-  user_id: string;
 };
 
 type DailyLog = {
@@ -38,27 +34,7 @@ type DailyLog = {
   responsible_name: string | null;
 };
 
-type LogDetails = {
-  crew: any[];
-  invoices: any[];
-  photos: any[];
-};
-
-/* ===============================
-   Formatação do número do RDO
-================================ */
-
-function formatRdoNumber(value: number | null | undefined) {
-  if (!value) return "RDO-000";
-  return `RDO-${String(value).padStart(3, "0")}`;
-}
-
-/* ===============================
-   Página principal
-================================ */
-
 export default function ObraDetalhePage() {
-
   const { id } = useParams();
   const navigate = useNavigate();
 
@@ -68,19 +44,7 @@ export default function ObraDetalhePage() {
 
   const [activeTab, setActiveTab] = useState<"registro" | "historico">("registro");
 
-  const [selectedLog, setSelectedLog] = useState<DailyLog | null>(null);
-  const [selectedLogDetails, setSelectedLogDetails] = useState<LogDetails | null>(null);
-
-  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
-
-  const menuRef = useRef<HTMLDivElement | null>(null);
-
-  /* ===============================
-     Carregar dados
-  ================================= */
-
   async function loadData() {
-
     if (!id) return;
 
     setLoading(true);
@@ -96,7 +60,7 @@ export default function ObraDetalhePage() {
 
     const { data: projectData } = await supabase
       .from("projects")
-      .select("id,name,client_name,address,user_id")
+      .select("id,name,client_name,address")
       .eq("id", id)
       .single();
 
@@ -117,65 +81,29 @@ export default function ObraDetalhePage() {
     loadData();
   }, [id]);
 
-  /* ===============================
-     Fechar menu ao clicar fora
-  ================================= */
-
-  useEffect(() => {
-
-    function handleClickOutside(event: MouseEvent) {
-
-      if (!menuRef.current?.contains(event.target as Node)) {
-        setOpenMenuId(null);
-      }
-
-    }
-
-    document.addEventListener("mousedown", handleClickOutside);
-
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-
-  }, []);
-
   function handleBack() {
     navigate("/obras");
   }
 
-  /* ===============================
-     Compartilhar
-  ================================= */
-
   async function handleShareLog(log: DailyLog) {
-
-    const shareUrl = `https://rdo-app-sigma.vercel.app/rdo/${log.id}`;
+    const url = `https://rdo-app-sigma.vercel.app/rdo/${log.id}`;
 
     try {
-
-      await navigator.clipboard.writeText(shareUrl);
-
-      alert("Link copiado!");
-
+      await navigator.clipboard.writeText(url);
+      alert("Link do registro copiado!");
     } catch {
-
-      prompt("Copie o link:", shareUrl);
-
+      prompt("Copie o link:", url);
     }
-
   }
 
-  /* ===============================
-     Gerar PDF
-  ================================= */
-
   async function buildPdf(log: DailyLog) {
-
     const qr = await QRCode.toDataURL(
       `https://rdo-app-sigma.vercel.app/rdo/${log.id}`
     );
 
     return `
     <html>
-      <body style="font-family:Arial;padding:30px">
+      <body style="font-family:Arial;padding:40px">
 
       <h2>Registro Diário de Obra</h2>
 
@@ -192,13 +120,15 @@ export default function ObraDetalhePage() {
       <p><b>Clima manhã:</b> ${log.weather_morning ?? "-"}</p>
       <p><b>Clima tarde:</b> ${log.weather_afternoon ?? "-"}</p>
 
+      <p><b>Responsável:</b> ${log.responsible_name ?? "-"}</p>
+
       <p><b>Resumo:</b> ${log.summary ?? "-"}</p>
 
       <p><b>Ocorrências:</b> ${log.issues ?? "-"}</p>
 
       <p><b>Serviços:</b> ${log.next_steps ?? "-"}</p>
 
-      <br>
+      <br><br>
 
       <img src="${qr}" width="120"/>
 
@@ -207,27 +137,19 @@ export default function ObraDetalhePage() {
     `;
   }
 
-  async function handleGenerateLogPdf(log: DailyLog) {
-
+  async function handleGeneratePdf(log: DailyLog) {
     const html = await buildPdf(log);
 
-    const printWindow = window.open("", "_blank");
+    const win = window.open("", "_blank");
 
-    if (!printWindow) return;
+    if (!win) return;
 
-    printWindow.document.write(html);
-
-    printWindow.document.close();
-
-    printWindow.print();
+    win.document.write(html);
+    win.document.close();
+    win.print();
   }
 
-  /* ===============================
-     Layout
-  ================================= */
-
   if (loading) {
-
     return (
       <div className="rdo-page">
         <div className="rdo-container">
@@ -235,21 +157,18 @@ export default function ObraDetalhePage() {
         </div>
       </div>
     );
-
   }
 
   if (!project) return null;
 
   return (
     <div className="rdo-page">
-
       <div className="rdo-container">
 
         <div className="rdo-header">
 
           <div>
             <h1>{project.name}</h1>
-
             <p>
               {project.client_name && <>Cliente: {project.client_name} • </>}
               {project.address}
@@ -261,8 +180,6 @@ export default function ObraDetalhePage() {
           </button>
 
         </div>
-
-        {/* TABS */}
 
         <div className="rdo-tabs">
 
@@ -280,10 +197,7 @@ export default function ObraDetalhePage() {
 
         </div>
 
-        {/* REGISTRO */}
-
         {activeTab === "registro" && (
-
           <RegistroWizard
             project={{
               id: project.id,
@@ -293,38 +207,48 @@ export default function ObraDetalhePage() {
             }}
             onSaved={loadData}
           />
-
         )}
-
-        {/* HISTÓRICO */}
 
         {activeTab === "historico" && (
 
-          <div>
+          <div style={{marginTop:20}}>
+
+            {logs.length === 0 && (
+              <p>Nenhum registro ainda.</p>
+            )}
 
             {logs.map((log) => (
 
-              <div key={log.id} className="rdo-log-item">
+              <div
+                key={log.id}
+                style={{
+                  border:"1px solid #ddd",
+                  borderRadius:10,
+                  padding:16,
+                  marginBottom:12
+                }}
+              >
 
-                <div>
+                <strong>
+                  {formatRdoNumber(log.register_number)}
+                </strong>
 
-                  <strong>
-                    {formatRdoNumber(log.register_number)}
-                  </strong>
+                {" • "}
 
-                  {" • "}
+                {formatDateBR(log.log_date)}
 
-                  {formatDateBR(log.log_date)}
+                <div style={{marginTop:10}}>
 
-                </div>
-
-                <div>
-
-                  <button onClick={() => handleGenerateLogPdf(log)}>
-                    PDF
+                  <button
+                    onClick={() => handleGeneratePdf(log)}
+                    style={{marginRight:10}}
+                  >
+                    Gerar PDF
                   </button>
 
-                  <button onClick={() => handleShareLog(log)}>
+                  <button
+                    onClick={() => handleShareLog(log)}
+                  >
                     Compartilhar
                   </button>
 
@@ -339,7 +263,6 @@ export default function ObraDetalhePage() {
         )}
 
       </div>
-
     </div>
   );
 }
