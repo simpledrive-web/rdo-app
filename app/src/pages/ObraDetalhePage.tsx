@@ -76,7 +76,6 @@ export default function ObraDetalhePage() {
   const [selectedLogDetails, setSelectedLogDetails] = useState<LogDetails | null>(
     null
   );
-  const [viewingLogId, setViewingLogId] = useState<string | null>(null);
   const [pdfLoadingId, setPdfLoadingId] = useState<string | null>(null);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
 
@@ -253,18 +252,15 @@ export default function ObraDetalhePage() {
   }
 
   async function handleViewLog(log: DailyLog) {
-    try {
-      setViewingLogId(log.id);
-      const details = await loadLogDetails(log);
-      setSelectedLog(log);
-      setSelectedLogDetails(details);
-      setOpenMenuId(null);
-    } catch (error) {
-      alert(error instanceof Error ? error.message : "Erro ao carregar registro.");
-    } finally {
-      setViewingLogId(null);
-    }
+  try {
+    const details = await loadLogDetails(log);
+    setSelectedLog(log);
+    setSelectedLogDetails(details);
+    setOpenMenuId(null);
+  } catch (error) {
+    alert(error instanceof Error ? error.message : "Erro ao carregar registro.");
   }
+}
 
   async function handleEditLog(log: DailyLog) {
     setActiveTab("registro");
