@@ -25,6 +25,7 @@ export default function Dashboard() {
 
       const firstName = user.user_metadata?.first_name ?? "";
       const lastName = user.user_metadata?.last_name ?? "";
+
       const fullName =
         user.user_metadata?.full_name?.trim() ||
         `${firstName} ${lastName}`.trim() ||
@@ -61,7 +62,9 @@ export default function Dashboard() {
             <div>
               <p className="dashboard-kicker">RDO APP</p>
 
-              <h1 className="dashboard-title">Registro Diário de Obras</h1>
+              <h1 className="dashboard-title">
+                Registro Diário de Obras
+              </h1>
 
               <p className="dashboard-welcome">
                 Bem-vindo(a), <strong>{userInfo.name || "Usuário"}</strong>
@@ -69,8 +72,8 @@ export default function Dashboard() {
 
               <p className="dashboard-subtitle">
                 Organize registros diários, acompanhe o andamento das obras,
-                adicione funcionários, notas fiscais, serviços e fotos em um só
-                lugar.
+                adicione funcionários, serviços, fotos e notas fiscais em um
+                único lugar.
               </p>
             </div>
 
@@ -81,14 +84,6 @@ export default function Dashboard() {
                 onClick={() => navigate("/obras")}
               >
                 Ir para Obras
-              </button>
-
-              <button
-                type="button"
-                className="rdo-btn rdo-btn-secondary"
-                onClick={() => navigate("/usuarios")}
-              >
-                Ver Usuários
               </button>
 
               <button
