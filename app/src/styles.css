@@ -632,3 +632,136 @@ a:hover {
     height: 180px;
   }
 }
+
+.auth-page {
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at top left, rgba(37, 99, 235, 0.08), transparent 28%),
+    linear-gradient(180deg, #f5f8ff 0%, #eef3fb 100%);
+  padding: 24px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.auth-shell {
+  width: 100%;
+  max-width: 560px;
+}
+
+.auth-card {
+  background: #fff;
+  border: 1px solid rgba(219, 227, 239, 0.95);
+  border-radius: 28px;
+  box-shadow: 0 24px 44px rgba(15, 23, 42, 0.08);
+  padding: 30px;
+}
+
+.auth-brand {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  margin-bottom: 24px;
+}
+
+.auth-brand-badge {
+  width: 58px;
+  height: 58px;
+  border-radius: 18px;
+  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  flex-shrink: 0;
+}
+
+.auth-title {
+  margin: 0;
+  font-size: 2rem;
+  letter-spacing: -0.03em;
+  color: #0f172a;
+}
+
+.auth-subtitle {
+  margin: 8px 0 0;
+  color: #64748b;
+}
+
+.auth-divider-wrap {
+  display: grid;
+  gap: 16px;
+}
+
+.auth-google-btn {
+  width: 100%;
+}
+
+.auth-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: #94a3b8;
+  font-weight: 700;
+}
+
+.auth-divider::before,
+.auth-divider::after {
+  content: "";
+  height: 1px;
+  flex: 1;
+  background: #dbe3ef;
+}
+
+.auth-form {
+  display: grid;
+  gap: 16px;
+  margin-top: 18px;
+}
+
+.auth-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: #475569;
+  font-weight: 600;
+}
+
+.auth-links-row {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.auth-link {
+  color: #2563eb;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.auth-link:hover {
+  text-decoration: underline;
+}
+
+.auth-submit {
+  width: 100%;
+  margin-top: 4px;
+}
+
+.auth-footer {
+  margin-top: 18px;
+  color: #64748b;
+}
+
+@media (max-width: 640px) {
+  .auth-card {
+    padding: 22px;
+    border-radius: 22px;
+  }
+
+  .auth-brand {
+    flex-direction: column;
+    gap: 12px;
+  }
+}
