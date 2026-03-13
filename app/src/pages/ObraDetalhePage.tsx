@@ -162,9 +162,15 @@ export default function ObraDetalhePage() {
     if (logIds.length > 0) {
       const [{ data: crewData }, { data: photosData }, { data: invoicesData }] =
         await Promise.all([
-          supabase.from("crew_entries").select("daily_log_id").in("daily_log_id", logIds),
+          supabase
+            .from("crew_entries")
+            .select("daily_log_id")
+            .in("daily_log_id", logIds),
           supabase.from("photos").select("daily_log_id").in("daily_log_id", logIds),
-          supabase.from("invoice_files").select("daily_log_id").in("daily_log_id", logIds),
+          supabase
+            .from("invoice_files")
+            .select("daily_log_id")
+            .in("daily_log_id", logIds),
         ]);
 
       (crewData ?? []).forEach((item: { daily_log_id: string }) => {
@@ -385,15 +391,13 @@ export default function ObraDetalhePage() {
         ? details.photos
             .map(
               (photo) => `
-                <div style="margin-bottom:18px; break-inside: avoid;">
+                <div class="photo-card">
                   ${
                     photo.signed_url
-                      ? `<img src="${photo.signed_url}" style="width:100%; max-width:320px; border-radius:10px; border:1px solid #dbe3ef;" />`
+                      ? `<img src="${photo.signed_url}" class="pdf-image" crossorigin="anonymous" />`
                       : ""
                   }
-                  <div style="margin-top:8px;"><strong>Legenda:</strong> ${
-                    photo.caption || "-"
-                  }</div>
+                  <div class="photo-caption"><strong>Legenda:</strong> ${photo.caption || "-"}</div>
                 </div>
               `
             )
@@ -405,7 +409,7 @@ export default function ObraDetalhePage() {
         ? details.invoices
             .map(
               (invoice) => `
-                <div style="border:1px solid #dbe3ef; border-radius:12px; padding:12px; margin-bottom:14px; break-inside: avoid;">
+                <div class="invoice-card">
                   <p><strong>Estabelecimento:</strong> ${
                     invoice.establishment_name || "-"
                   }</p>
@@ -418,7 +422,7 @@ export default function ObraDetalhePage() {
                     invoice.signed_url &&
                     invoice.mime_type &&
                     invoice.mime_type.startsWith("image/")
-                      ? `<img src="${invoice.signed_url}" style="width:100%; max-width:320px; border-radius:10px; border:1px solid #dbe3ef;" />`
+                      ? `<img src="${invoice.signed_url}" class="pdf-image" crossorigin="anonymous" />`
                       : ""
                   }
                 </div>
@@ -429,24 +433,148 @@ export default function ObraDetalhePage() {
 
     return `
       <html>
-        <body style="font-family:Arial, sans-serif;padding:34px;color:#0f172a;">
-          <div style="display:flex; justify-content:space-between; gap:16px; border-bottom:3px solid #2563eb; padding-bottom:14px; margin-bottom:20px;">
+        <head>
+          <title>${formatRdoNumber(log.register_number)}</title>
+          <style>
+            * {
+              box-sizing: border-box;
+            }
+
+            body {
+              font-family: Arial, sans-serif;
+              padding: 30px;
+              color: #0f172a;
+              font-size: 14px;
+            }
+
+            h1, h2, h3 {
+              margin-top: 0;
+            }
+
+            p {
+              margin: 6px 0;
+            }
+
+            img {
+              max-width: 100%;
+            }
+
+            .header {
+              display: flex;
+              justify-content: space-between;
+              gap: 16px;
+              border-bottom: 3px solid #2563eb;
+              padding-bottom: 14px;
+              margin-bottom: 20px;
+            }
+
+            .section-box {
+              border: 1px solid #dbe3ef;
+              border-radius: 12px;
+              padding: 14px;
+              margin-bottom: 18px;
+            }
+
+            .badge {
+              display: inline-block;
+              padding: 8px 12px;
+              border-radius: 999px;
+              margin-right: 8px;
+              margin-bottom: 8px;
+              font-size: 12px;
+              font-weight: 700;
+            }
+
+            .badge-crew {
+              background: #eff6ff;
+              color: #1d4ed8;
+              border: 1px solid #bfdbfe;
+            }
+
+            .badge-invoice {
+              background: #f0fdf4;
+              color: #15803d;
+              border: 1px solid #bbf7d0;
+            }
+
+            .badge-photo {
+              background: #faf5ff;
+              color: #9333ea;
+              border: 1px solid #e9d5ff;
+            }
+
+            .photos-grid {
+              display: grid;
+              grid-template-columns: repeat(2, minmax(0, 1fr));
+              gap: 16px;
+              align-items: start;
+            }
+
+            .photo-card {
+              border: 1px solid #dbe3ef;
+              border-radius: 12px;
+              padding: 10px;
+              break-inside: avoid;
+              page-break-inside: avoid;
+            }
+
+            .invoice-card {
+              border: 1px solid #dbe3ef;
+              border-radius: 12px;
+              padding: 12px;
+              margin-bottom: 14px;
+              break-inside: avoid;
+              page-break-inside: avoid;
+            }
+
+            .pdf-image {
+              width: 100%;
+              max-width: 100%;
+              display: block;
+              border-radius: 10px;
+              border: 1px solid #dbe3ef;
+              object-fit: cover;
+            }
+
+            .photo-caption {
+              margin-top: 8px;
+            }
+
+            .footer {
+              margin-top: 24px;
+              color: #64748b;
+              font-size: 12px;
+            }
+
+            @media print {
+              body {
+                padding: 18px;
+              }
+
+              .photos-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+              }
+            }
+          </style>
+        </head>
+
+        <body>
+          <div class="header">
             <div>
-              <h1 style="margin:0 0 8px;">Registro Diário de Obra</h1>
-              <p style="margin:4px 0;"><strong>Obra:</strong> ${project?.name || "-"}</p>
-              <p style="margin:4px 0;"><strong>Cliente:</strong> ${project?.client_name || "-"}</p>
-              <p style="margin:4px 0;"><strong>Endereço:</strong> ${project?.address || "-"}</p>
-              <p style="margin:8px 0 0;"><strong>Registro:</strong> ${formatRdoNumber(
-                log.register_number
-              )}</p>
+              <h1>Registro Diário de Obra</h1>
+              <p><strong>Obra:</strong> ${project?.name || "-"}</p>
+              <p><strong>Cliente:</strong> ${project?.client_name || "-"}</p>
+              <p><strong>Endereço:</strong> ${project?.address || "-"}</p>
+              <p><strong>Registro:</strong> ${formatRdoNumber(log.register_number)}</p>
             </div>
+
             <div style="text-align:right;">
               <img src="${qr}" width="110" />
               <div style="font-size:12px;color:#64748b;">Validação do registro</div>
             </div>
           </div>
 
-          <div style="border:1px solid #dbe3ef; border-radius:12px; padding:14px; margin-bottom:18px;">
+          <div class="section-box">
             <p><strong>Data:</strong> ${formatDateBR(log.log_date)}</p>
             <p><strong>Clima manhã:</strong> ${log.weather_morning || "-"}</p>
             <p><strong>Clima tarde:</strong> ${log.weather_afternoon || "-"}</p>
@@ -457,23 +585,53 @@ export default function ObraDetalhePage() {
           </div>
 
           <div style="margin-bottom:18px;">
-            <span style="display:inline-block; padding:8px 12px; border-radius:999px; background:#eff6ff; color:#1d4ed8; border:1px solid #bfdbfe; margin-right:8px;">Funcionários (${details.crew.length})</span>
-            <span style="display:inline-block; padding:8px 12px; border-radius:999px; background:#f0fdf4; color:#15803d; border:1px solid #bbf7d0; margin-right:8px;">NF's (${details.invoices.length})</span>
-            <span style="display:inline-block; padding:8px 12px; border-radius:999px; background:#faf5ff; color:#9333ea; border:1px solid #e9d5ff;">Fotos (${details.photos.length})</span>
+            <span class="badge badge-crew">Funcionários (${details.crew.length})</span>
+            <span class="badge badge-invoice">NF's (${details.invoices.length})</span>
+            <span class="badge badge-photo">Fotos (${details.photos.length})</span>
           </div>
 
           <h3>Funcionários</h3>
           <ul>${crewHtml}</ul>
 
           <h3>Fotos (${details.photos.length})</h3>
-          ${photosHtml}
+          <div class="photos-grid">
+            ${photosHtml}
+          </div>
 
-          <h3>NF's (${details.invoices.length})</h3>
+          <h3 style="margin-top:24px;">NF's (${details.invoices.length})</h3>
           ${invoicesHtml}
 
-          <div style="margin-top:24px; color:#64748b; font-size:12px;">
+          <div class="footer">
             Documento gerado em ${new Date().toLocaleString("pt-BR")}
           </div>
+
+          <script>
+            async function waitForImages() {
+              const images = Array.from(document.images);
+
+              await Promise.all(
+                images.map((img) => {
+                  if (img.complete && img.naturalWidth > 0) {
+                    return Promise.resolve();
+                  }
+
+                  return new Promise((resolve) => {
+                    const done = () => resolve();
+                    img.addEventListener("load", done, { once: true });
+                    img.addEventListener("error", done, { once: true });
+                    setTimeout(done, 6000);
+                  });
+                })
+              );
+            }
+
+            window.onload = async () => {
+              await waitForImages();
+              setTimeout(() => {
+                window.print();
+              }, 700);
+            };
+          </script>
         </body>
       </html>
     `;
@@ -484,9 +642,9 @@ export default function ObraDetalhePage() {
     const win = window.open("", "_blank");
     if (!win) return;
 
+    win.document.open();
     win.document.write(html);
     win.document.close();
-    win.print();
 
     setOpenMenuId(null);
   }
