@@ -4,10 +4,6 @@ import { supabase } from "../supabase/client";
 
 function formatDateBR(dateString: string | null) {
   if (!dateString) return "-";
-<<<<<<< HEAD
-=======
-
->>>>>>> a820673f08273b88a9028df28e36a6771782cc88
   const [year, month, day] = dateString.split("-");
   return `${day}/${month}/${year}`;
 }
@@ -112,17 +108,13 @@ export default function PublicRegistroPage() {
 
     setCrew(crewData ?? []);
 
-<<<<<<< HEAD
-    // 🔹 Trecho corrigido: usa URL pública
-=======
->>>>>>> a820673f08273b88a9028df28e36a6771782cc88
+    // 🔹 Fotos com URL pública
     const { data: photosData } = await supabase
       .from("photos")
       .select("id, storage_path, caption")
       .eq("daily_log_id", logId)
       .order("taken_at", { ascending: false });
 
-<<<<<<< HEAD
     const publicPhotos = (photosData ?? []).map((photo) => {
       const { data } = supabase.storage
         .from("project-photos")
@@ -135,22 +127,6 @@ export default function PublicRegistroPage() {
     });
 
     setPhotos(publicPhotos);
-=======
-    const signedPhotos = await Promise.all(
-      (photosData ?? []).map(async (photo) => {
-        const { data } = await supabase.storage
-          .from("project-photos")
-          .createSignedUrl(photo.storage_path, 3600);
-
-        return {
-          ...photo,
-          signed_url: data?.signedUrl ?? null,
-        };
-      })
-    );
-
-    setPhotos(signedPhotos);
->>>>>>> a820673f08273b88a9028df28e36a6771782cc88
 
     const { data: invoicesData } = await supabase
       .from("invoice_files")
@@ -207,6 +183,7 @@ export default function PublicRegistroPage() {
     <div className="rdo-page">
       <div className="rdo-container">
         <div className="rdo-card rdo-section">
+          {/* Cabeçalho */}
           <div
             style={{
               display: "flex",
@@ -254,6 +231,7 @@ export default function PublicRegistroPage() {
             </div>
           </div>
 
+          {/* Obra */}
           <div className="rdo-top-gap">
             <h3>Obra</h3>
             <div className="rdo-card" style={{ padding: 16 }}>
@@ -269,6 +247,7 @@ export default function PublicRegistroPage() {
             </div>
           </div>
 
+          {/* Informações do registro */}
           <div className="rdo-top-gap">
             <h3>Informações do registro</h3>
             <div className="rdo-card" style={{ padding: 16 }}>
@@ -296,6 +275,7 @@ export default function PublicRegistroPage() {
             </div>
           </div>
 
+          {/* Funcionários */}
           <div className="rdo-top-gap">
             <h3>Funcionários</h3>
             <div className="rdo-card" style={{ padding: 16 }}>
@@ -313,6 +293,7 @@ export default function PublicRegistroPage() {
             </div>
           </div>
 
+          {/* Fotos */}
           <div className="rdo-top-gap">
             <h3>Fotos</h3>
             <div className="rdo-card" style={{ padding: 16 }}>
@@ -363,6 +344,7 @@ export default function PublicRegistroPage() {
             </div>
           </div>
 
+          {/* Notas fiscais */}
           <div className="rdo-top-gap">
             <h3>Notas fiscais</h3>
             <div className="rdo-card" style={{ padding: 16 }}>
