@@ -1,24 +1,28 @@
 import { supabase } from "./client";
 
-export async function atualizarFotosPublicas() {
-  const { data: photos } = await supabase
+export type PublicPhotoURL = {
+  id: string;
+  public_url: string | null;
+};
+
+export async function atualizarFotosPublicas(): Promise<PublicPhotoURL[]> {
+  const { data: fotos } = await supabase
     .from("photos")
     .select("id, storage_path");
 
-  if (!photos) return;
+  if (!fotos) return [];
 
-  const updated = photos.map((photo) => {
-    const { data } = supabase.storage
+  const fotosAtualizadas: PublicPhotoURL[] = fotos.map((foto) => {
+    // Correto: chama getPublicUrl e pega a propriedade publicUrl
+    const publicUrl = supabase.storage
       .from("project-photos")
-      .getPublicUrl(photo.storage_path);
-
-    const publicUrl = data?.publicUrl ?? null;
+      .getPublicUrl(foto.storage_path).data.publicUrl;
 
     return {
-      id: photo.id,
-      signed_url: publicUrl,
+      id: foto.id,
+      public_url: publicUrl,
     };
   });
 
-  console.log("Fotos públicas atualizadas:", updated);
+  return fotosAtualizadas;
 }
