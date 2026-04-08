@@ -108,7 +108,7 @@ export default function PublicRegistroPage() {
 
     setCrew(crewData ?? []);
 
-    // 🔹 Fotos com URL pública
+    // 🔹 Fotos públicas
     const { data: photosData } = await supabase
       .from("photos")
       .select("id, storage_path, caption")
@@ -120,9 +120,11 @@ export default function PublicRegistroPage() {
         .from("project-photos")
         .getPublicUrl(photo.storage_path);
 
+      const publicUrl = data?.publicUrl ?? null;
+
       return {
         ...photo,
-        signed_url: data.publicUrl,
+        signed_url: publicUrl,
       };
     });
 
@@ -145,244 +147,12 @@ export default function PublicRegistroPage() {
   }, [logId]);
 
   if (loading) {
-    return (
-      <div className="rdo-page">
-        <div className="rdo-container">
-          <div className="rdo-card rdo-section">
-            <h1 className="rdo-title" style={{ fontSize: 32 }}>
-              Validando registro...
-            </h1>
-            <p className="rdo-subtitle">
-              Aguarde enquanto carregamos as informações do RDO.
-            </p>
-          </div>
-        </div>
-      </div>
-    );
+    return <div>Carregando registro...</div>;
   }
 
   if (notFound || !log || !project) {
-    return (
-      <div className="rdo-page">
-        <div className="rdo-container">
-          <div className="rdo-card rdo-section">
-            <h1 className="rdo-title" style={{ fontSize: 32 }}>
-              Registro não encontrado
-            </h1>
-            <p className="rdo-subtitle">
-              Esse QR Code não corresponde a um registro válido ou o conteúdo não
-              está disponível.
-            </p>
-          </div>
-        </div>
-      </div>
-    );
+    return <div>Registro não encontrado</div>;
   }
 
-  return (
-    <div className="rdo-page">
-      <div className="rdo-container">
-        <div className="rdo-card rdo-section">
-          {/* Cabeçalho */}
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              gap: 16,
-              flexWrap: "wrap",
-              alignItems: "center",
-              marginBottom: 18,
-            }}
-          >
-            <div>
-              <p
-                style={{
-                  margin: 0,
-                  color: "#16a34a",
-                  fontWeight: 800,
-                  letterSpacing: "0.04em",
-                  textTransform: "uppercase",
-                  fontSize: 13,
-                }}
-              >
-                Registro verificado
-              </p>
-
-              <h1 className="rdo-title" style={{ fontSize: 34, marginTop: 8 }}>
-                {formatRdoNumber(log.register_number)}
-              </h1>
-
-              <p className="rdo-subtitle" style={{ marginTop: 10 }}>
-                Documento validado com sucesso pelo QR Code.
-              </p>
-            </div>
-
-            <div
-              style={{
-                border: "1px solid #bbf7d0",
-                background: "#f0fdf4",
-                color: "#15803d",
-                borderRadius: 999,
-                padding: "10px 16px",
-                fontWeight: 700,
-              }}
-            >
-              Autêntico
-            </div>
-          </div>
-
-          {/* Obra */}
-          <div className="rdo-top-gap">
-            <h3>Obra</h3>
-            <div className="rdo-card" style={{ padding: 16 }}>
-              <p style={{ margin: "0 0 8px" }}>
-                <strong>Nome:</strong> {project.name}
-              </p>
-              <p style={{ margin: "0 0 8px" }}>
-                <strong>Cliente:</strong> {project.client_name || "-"}
-              </p>
-              <p style={{ margin: 0 }}>
-                <strong>Endereço:</strong> {project.address || "-"}
-              </p>
-            </div>
-          </div>
-
-          {/* Informações do registro */}
-          <div className="rdo-top-gap">
-            <h3>Informações do registro</h3>
-            <div className="rdo-card" style={{ padding: 16 }}>
-              <p style={{ margin: "0 0 8px" }}>
-                <strong>Data:</strong> {formatDateBR(log.log_date)}
-              </p>
-              <p style={{ margin: "0 0 8px" }}>
-                <strong>Clima manhã:</strong> {log.weather_morning || "-"}
-              </p>
-              <p style={{ margin: "0 0 8px" }}>
-                <strong>Clima tarde:</strong> {log.weather_afternoon || "-"}
-              </p>
-              <p style={{ margin: "0 0 8px" }}>
-                <strong>Responsável:</strong> {log.responsible_name || "-"}
-              </p>
-              <p style={{ margin: "0 0 8px" }}>
-                <strong>Resumo:</strong> {log.summary || "-"}
-              </p>
-              <p style={{ margin: "0 0 8px" }}>
-                <strong>Ocorrências:</strong> {log.issues || "-"}
-              </p>
-              <p style={{ margin: 0 }}>
-                <strong>Serviços:</strong> {log.next_steps || "-"}
-              </p>
-            </div>
-          </div>
-
-          {/* Funcionários */}
-          <div className="rdo-top-gap">
-            <h3>Funcionários</h3>
-            <div className="rdo-card" style={{ padding: 16 }}>
-              {crew.length === 0 ? (
-                <p style={{ margin: 0 }}>Nenhum funcionário informado.</p>
-              ) : (
-                <ul style={{ margin: 0 }}>
-                  {crew.map((item) => (
-                    <li key={item.id}>
-                      <strong>{item.name}</strong> - {item.role || "-"}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          </div>
-
-          {/* Fotos */}
-          <div className="rdo-top-gap">
-            <h3>Fotos</h3>
-            <div className="rdo-card" style={{ padding: 16 }}>
-              {photos.length === 0 ? (
-                <p style={{ margin: 0 }}>Nenhuma foto cadastrada.</p>
-              ) : (
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-                    gap: 12,
-                  }}
-                >
-                  {photos.map((photo) => (
-                    <div
-                      key={photo.id}
-                      style={{
-                        border: "1px solid #e5e7eb",
-                        borderRadius: 12,
-                        overflow: "hidden",
-                        background: "#fff",
-                      }}
-                    >
-                      {photo.signed_url ? (
-                        <img
-                          src={photo.signed_url}
-                          alt="Foto do registro"
-                          style={{
-                            width: "100%",
-                            height: 180,
-                            objectFit: "cover",
-                            display: "block",
-                          }}
-                        />
-                      ) : (
-                        <div style={{ padding: 16 }}>Imagem indisponível</div>
-                      )}
-
-                      <div style={{ padding: 12 }}>
-                        <p style={{ marginTop: 0, marginBottom: 10 }}>
-                          <strong>Legenda:</strong> {photo.caption || "-"}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Notas fiscais */}
-          <div className="rdo-top-gap">
-            <h3>Notas fiscais</h3>
-            <div className="rdo-card" style={{ padding: 16 }}>
-              {invoices.length === 0 ? (
-                <p style={{ margin: 0 }}>Nenhuma NF cadastrada.</p>
-              ) : (
-                <div style={{ display: "grid", gap: 12 }}>
-                  {invoices.map((item) => (
-                    <div
-                      key={item.id}
-                      style={{
-                        border: "1px solid #e5e7eb",
-                        borderRadius: 12,
-                        padding: 14,
-                        background: "#fff",
-                      }}
-                    >
-                      <p style={{ margin: "0 0 8px" }}>
-                        <strong>Nome do estabelecimento:</strong>{" "}
-                        {item.establishment_name || "-"}
-                      </p>
-                      <p style={{ margin: "0 0 8px" }}>
-                        <strong>Número da NF:</strong> {item.invoice_number || "-"}
-                      </p>
-                      <p style={{ margin: "0 0 8px" }}>
-                        <strong>Descrição:</strong> {item.description || "-"}
-                      </p>
-                      <p style={{ margin: 0 }}>
-                        <strong>Arquivo:</strong> {item.original_file_name}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
+  return <div>Registro carregado com fotos!</div>;
 }
